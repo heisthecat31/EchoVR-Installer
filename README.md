@@ -1,1 +1,1 @@
-the project for this made by android studio.
+the project for this is made by android studio.
