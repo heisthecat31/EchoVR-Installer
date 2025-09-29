@@ -1,5 +1,6 @@
 package com.echovr.installer;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -25,6 +26,7 @@ import android.widget.TextView;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.FileProvider;
@@ -72,9 +74,7 @@ public class MainActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<Intent> installPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
-            result -> {
-                checkAndRequestStoragePermissions();
-            }
+            result -> checkAndRequestStoragePermissions()
     );
 
     @Override
@@ -93,14 +93,10 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(Color.TRANSPARENT);
-        }
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-        }
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
     }
 
     private void checkInstallUnknownAppsPermission() {
@@ -113,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
         checkAndRequestStoragePermissions();
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
     private void showInstallPermissionDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Install Permission Required");
@@ -229,6 +226,7 @@ public class MainActivity extends AppCompatActivity {
         downloadAndInstallApk();
     }
 
+    @SuppressLint("SetTextI18n")
     private void showNewPlayerDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("New Player Installation");
@@ -298,7 +296,6 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         cancelParams.setMargins(0, 0, 5, 0);
         cancelBtn.setLayoutParams(cancelParams);
-        cancelBtn.setOnClickListener(v -> builder.create().dismiss());
 
         Button installBtn = new Button(this);
         installBtn.setText("Install");
@@ -308,14 +305,6 @@ public class MainActivity extends AppCompatActivity {
         LinearLayout.LayoutParams installParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         installParams.setMargins(5, 0, 0, 0);
         installBtn.setLayoutParams(installParams);
-        installBtn.setOnClickListener(v -> {
-            String url = apkUrlInput.getText().toString().trim();
-            if (url.startsWith("http")) {
-                currentApkUrl = url;
-                builder.create().dismiss();
-                downloadAndInstallApk();
-            }
-        });
 
         buttonLayout.addView(cancelBtn);
         buttonLayout.addView(installBtn);
@@ -323,6 +312,19 @@ public class MainActivity extends AppCompatActivity {
 
         builder.setView(mainLayout);
         AlertDialog dialog = builder.create();
+
+        // Set up button listeners AFTER dialog creation
+        cancelBtn.setOnClickListener(v -> dialog.dismiss());
+
+        installBtn.setOnClickListener(v -> {
+            String url = apkUrlInput.getText().toString().trim();
+            if (url.startsWith("http")) {
+                currentApkUrl = url;
+                dialog.dismiss();
+                downloadAndInstallApk();
+            }
+        });
+
         dialog.show();
     }
 
@@ -428,7 +430,7 @@ public class MainActivity extends AppCompatActivity {
 
             Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", apkFile);
 
-            Intent installIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+            @SuppressLint("RequestInstallPackagesPolicy") Intent installIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
             installIntent.setData(apkUri);
             installIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             installIntent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
@@ -449,7 +451,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checkEchoVrInstallation() {
-        boolean isInstalled = isPackageInstalled(ECHO_VR_PACKAGE);
+        boolean isInstalled = isPackageInstalled();
 
         mainHandler.post(() -> {
             if (isInstalled) {
@@ -461,9 +463,9 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private boolean isPackageInstalled(String packageName) {
+    private boolean isPackageInstalled() {
         try {
-            getPackageManager().getPackageInfo(packageName, PackageManager.GET_ACTIVITIES);
+            getPackageManager().getPackageInfo(MainActivity.ECHO_VR_PACKAGE, PackageManager.GET_ACTIVITIES);
             return true;
         } catch (PackageManager.NameNotFoundException e) {
             return false;
@@ -644,6 +646,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private void showDataInstalled() {
         mainHandler.post(() -> {
             statusText.setText("Game data installed");
@@ -652,6 +655,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    @SuppressLint("SetTextI18n")
     private void showDataMissing() {
         mainHandler.post(() -> {
             statusText.setText("Game data not installed");
