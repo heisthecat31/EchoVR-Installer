@@ -9,14 +9,6 @@
         android:layout_height="match_parent"
         android:background="#80000000" />
 
-    <!-- Hidden EditText for paste functionality -->
-    <EditText
-        android:id="@+id/apkUrlInput"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:visibility="gone" />
-
-    <!-- REST OF YOUR EXISTING LAYOUT CODE STAYS THE SAME -->
     <LinearLayout
         android:id="@+id/gameSelectionLayout"
         android:layout_width="match_parent"
@@ -24,10 +16,7 @@
         android:orientation="vertical"
         android:gravity="center"
         android:padding="30dp">
-        
-        <!-- ... your existing content ... -->
 
-        <!-- Header -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -54,7 +43,6 @@
 
         </LinearLayout>
 
-        <!-- Options Title -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -63,7 +51,6 @@
             android:textSize="16sp"
             android:layout_marginBottom="30dp" />
 
-        <!-- Options Container -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -155,11 +142,56 @@
 
         </LinearLayout>
 
-        <!-- Info Text -->
+        <!-- Quest 3 Enhanced Graphics Mode Option -->
+        <LinearLayout
+            android:id="@+id/enhancedGraphicsOption"
+            android:layout_width="280dp"
+            android:layout_height="80dp"
+            android:background="@drawable/option_card_background"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:padding="15dp"
+            android:clickable="true"
+            android:focusable="true">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🚀"
+                android:textSize="20sp"
+                android:layout_marginEnd="10dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Quest 3 Enhanced Graphics"
+                    android:textColor="#4fc3f7"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Download high-res textures, for previously owned echo players only."
+                    android:textColor="#bbdefb"
+                    android:textSize="10sp"
+                    android:layout_marginTop="2dp" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
         <TextView
             android:layout_width="280dp"
             android:layout_height="wrap_content"
-            android:text="After Echo VR is installed, game data installation will begin automatically"
+            android:text="After Echo VR is installed, game data installation will be required."
             android:textColor="#90caf9"
             android:textSize="11sp"
             android:gravity="center"
@@ -168,7 +200,6 @@
 
     </LinearLayout>
 
-    <!-- Main Content Screen -->
     <LinearLayout
         android:id="@+id/mainContentLayout"
         android:layout_width="match_parent"
@@ -179,7 +210,6 @@
         android:layout_marginTop="60dp"
         android:visibility="gone">
 
-        <!-- Header -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -206,7 +236,6 @@
 
         </LinearLayout>
 
-        <!-- Status Card -->
         <LinearLayout
             android:layout_width="280dp"
             android:layout_height="wrap_content"
@@ -246,10 +275,22 @@
             android:textColor="#ffffff"
             android:textSize="12sp"
             android:textStyle="bold"
-            android:background="@drawable/download_button_pressed"
+            android:background="@drawable/download_button_background"
             android:layout_marginBottom="12dp" />
 
-        <!-- File Size Info -->
+        <!-- Reinstall Button -->
+        <Button
+            android:id="@+id/reinstallButton"
+            android:layout_width="280dp"
+            android:layout_height="45dp"
+            android:text="REINSTALL GAME DATA"
+            android:textColor="#ffffff"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="@drawable/download_button_background"
+            android:visibility="gone"
+            android:layout_marginBottom="12dp" />
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
