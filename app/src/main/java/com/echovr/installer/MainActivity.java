@@ -1,6 +1,5 @@
 package com.echovr.installer;
 
-import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -26,7 +25,6 @@ import android.widget.TextView;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
-import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.FileProvider;
@@ -46,6 +44,7 @@ public class MainActivity extends AppCompatActivity {
     private LinearLayout mainContentLayout;
     private TextView statusText;
     private Button downloadButton;
+    private Button reinstallButton;
     private AlertDialog progressDialog;
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
@@ -53,6 +52,8 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String ECHO_VR_LEGACY_URL = "https://files.echovr.de/r15_26-06-25.apk";
     private static final String DATA_URL = "https://files.echovr.de/_data.zip";
+    private static final String ENHANCED_GRAPHICS_URL = "https://files.echovr.de/cat/echo_graphics_boost.apk";
+
     private static final String TARGET_DIR = "readyatdawn/files";
     private static final String DATA_FOLDER = "_data";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
@@ -74,7 +75,9 @@ public class MainActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<Intent> installPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
-            result -> checkAndRequestStoragePermissions()
+            result -> {
+                checkAndRequestStoragePermissions();
+            }
     );
 
     @Override
@@ -93,10 +96,14 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            getWindow().setStatusBarColor(Color.TRANSPARENT);
+        }
 
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
+        }
     }
 
     private void checkInstallUnknownAppsPermission() {
@@ -109,7 +116,6 @@ public class MainActivity extends AppCompatActivity {
         checkAndRequestStoragePermissions();
     }
 
-    @RequiresApi(api = Build.VERSION_CODES.O)
     private void showInstallPermissionDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Install Permission Required");
@@ -129,9 +135,11 @@ public class MainActivity extends AppCompatActivity {
         mainContentLayout = findViewById(R.id.mainContentLayout);
         statusText = findViewById(R.id.statusText);
         downloadButton = findViewById(R.id.downloadButton);
+        reinstallButton = findViewById(R.id.reinstallButton);
 
         View legacyOption = findViewById(R.id.legacyOption);
         View newPlayerOption = findViewById(R.id.newPlayerOption);
+        View enhancedGraphicsOption = findViewById(R.id.enhancedGraphicsOption);
 
         if (legacyOption != null) {
             legacyOption.setOnClickListener(v -> downloadLegacyEchoVr());
@@ -141,9 +149,31 @@ public class MainActivity extends AppCompatActivity {
             newPlayerOption.setOnClickListener(v -> showNewPlayerDialog());
         }
 
+        if (enhancedGraphicsOption != null) {
+            enhancedGraphicsOption.setOnClickListener(v -> downloadEnhancedGraphicsPackage());
+        }
+
         if (downloadButton != null) {
             downloadButton.setOnClickListener(v -> startDataDownload());
         }
+
+        if (reinstallButton != null) {
+            reinstallButton.setOnClickListener(v -> showReinstallConfirmation());
+        }
+    }
+
+    private void showReinstallConfirmation() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Reinstall Game Data");
+        builder.setMessage("This will download and reinstall all game data files. This may take several minutes. Continue?");
+        builder.setPositiveButton("Reinstall", (dialog, which) -> {
+            startDataDownload();
+        });
+        builder.setNegativeButton("Cancel", (dialog, which) -> {
+            // Simply dismiss
+        });
+        builder.setCancelable(true);
+        builder.show();
     }
 
     private void checkAndRequestStoragePermissions() {
@@ -226,7 +256,11 @@ public class MainActivity extends AppCompatActivity {
         downloadAndInstallApk();
     }
 
-    @SuppressLint("SetTextI18n")
+    private void downloadEnhancedGraphicsPackage() {
+        currentApkUrl = ENHANCED_GRAPHICS_URL;
+        downloadAndInstallApk();
+    }
+
     private void showNewPlayerDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("New Player Installation");
@@ -313,8 +347,9 @@ public class MainActivity extends AppCompatActivity {
         builder.setView(mainLayout);
         AlertDialog dialog = builder.create();
 
-        // Set up button listeners AFTER dialog creation
-        cancelBtn.setOnClickListener(v -> dialog.dismiss());
+        cancelBtn.setOnClickListener(v -> {
+            dialog.dismiss();
+        });
 
         installBtn.setOnClickListener(v -> {
             String url = apkUrlInput.getText().toString().trim();
@@ -380,7 +415,9 @@ public class MainActivity extends AppCompatActivity {
                 return null;
             }
 
-            File apkFile = new File(apkDir, "echo_vr.apk");
+            String fileName = apkUrl.equals(ENHANCED_GRAPHICS_URL) ? "echo_vr_enhanced.apk" : "echo_vr.apk";
+            File apkFile = new File(apkDir, fileName);
+
             if (apkFile.exists()) {
                 apkFile.delete();
             }
@@ -399,7 +436,8 @@ public class MainActivity extends AppCompatActivity {
 
                 if (contentLength > 0) {
                     int progress = (int) ((totalDownloaded * 100) / contentLength);
-                    updateProgress(progress, "Downloading APK: " + progress + "%");
+                    String apkType = apkUrl.equals(ENHANCED_GRAPHICS_URL) ? "Enhanced APK" : "APK";
+                    updateProgress(progress, "Downloading " + apkType + ": " + progress + "%");
                 }
             }
 
@@ -430,7 +468,7 @@ public class MainActivity extends AppCompatActivity {
 
             Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", apkFile);
 
-            @SuppressLint("RequestInstallPackagesPolicy") Intent installIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+            Intent installIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
             installIntent.setData(apkUri);
             installIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             installIntent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
@@ -451,7 +489,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void checkEchoVrInstallation() {
-        boolean isInstalled = isPackageInstalled();
+        boolean isInstalled = isPackageInstalled(ECHO_VR_PACKAGE);
 
         mainHandler.post(() -> {
             if (isInstalled) {
@@ -463,9 +501,9 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private boolean isPackageInstalled() {
+    private boolean isPackageInstalled(String packageName) {
         try {
-            getPackageManager().getPackageInfo(MainActivity.ECHO_VR_PACKAGE, PackageManager.GET_ACTIVITIES);
+            getPackageManager().getPackageInfo(packageName, PackageManager.GET_ACTIVITIES);
             return true;
         } catch (PackageManager.NameNotFoundException e) {
             return false;
@@ -646,21 +684,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @SuppressLint("SetTextI18n")
     private void showDataInstalled() {
         mainHandler.post(() -> {
             statusText.setText("Game data installed");
             statusText.setTextColor(Color.parseColor("#4caf50"));
             downloadButton.setVisibility(View.GONE);
+            reinstallButton.setVisibility(View.VISIBLE);
         });
     }
 
-    @SuppressLint("SetTextI18n")
     private void showDataMissing() {
         mainHandler.post(() -> {
             statusText.setText("Game data not installed");
             statusText.setTextColor(Color.parseColor("#ff9800"));
             downloadButton.setVisibility(View.VISIBLE);
+            reinstallButton.setVisibility(View.GONE);
             downloadButton.setText("DOWNLOAD GAME DATA (937MB)");
         });
     }
