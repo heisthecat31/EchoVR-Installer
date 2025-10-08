@@ -1,7 +1,11 @@
 package com.echovr.installer;
 
 import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -12,16 +16,21 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -42,25 +51,42 @@ public class MainActivity extends AppCompatActivity {
 
     private LinearLayout gameSelectionLayout;
     private LinearLayout mainContentLayout;
+    private LinearLayout logViewerLayout;
     private TextView statusText;
+    private TextView logContentText;
     private Button downloadButton;
     private Button reinstallButton;
+    private Button openLogButton;
+    private Button logBackButton;
+    private Button copyLogButton;
+    private ScrollView logScrollView;
     private AlertDialog progressDialog;
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    private static final String ECHO_VR_LEGACY_URL = "https://files.echovr.de/r15_26-06-25.apk";
-    private static final String DATA_URL = "https://files.echovr.de/_data.zip";
-    private static final String ENHANCED_GRAPHICS_URL = "https://files.echovr.de/cat/echo_graphics_boost.apk";
+    private static final String ECHO_VR_LEGACY_URL = "https://evr.echo.taxi/r15_26-06-25.apk";
+    private static final String DATA_URL = "https://mia.cdn.echo.taxi/_data.zip";
+    private static final String ENHANCED_GRAPHICS_URL = "https://mia.cdn.echo.taxi/questEchoTextureMod_Alpha_v0.1_06-10-25.apk";
 
     private static final String TARGET_DIR = "readyatdawn/files";
     private static final String DATA_FOLDER = "_data";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
-    private static final long TOTAL_FILE_SIZE = 937L * 1024 * 1024;
+    private static final String LOG_DIRECTORY = "r14logs";
+    private static final long TOTAL_FILE_SIZE = 894L * 1024 * 1024;
+
+    private static final String PREFS_NAME = "EchoVRInstallerPrefs";
+    private static final String PREF_PERMISSION_POPUP_SHOWN = "permission_popup_shown";
+
+    // Clipboard limits to prevent crashes
+    private static final int MAX_CLIPBOARD_SIZE = 100000; // ~100KB limit
+    private static final int MAX_LINES_TO_COPY = 1000; // Max lines to copy
 
     private String currentApkUrl = "";
     private boolean echoVrInstalled = false;
+    private SharedPreferences prefs;
+    private boolean justInstalledEchoVr = false;
+    private String currentLogContent = "";
 
     private final ActivityResultLauncher<Intent> manageStorageLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
@@ -75,18 +101,16 @@ public class MainActivity extends AppCompatActivity {
 
     private final ActivityResultLauncher<Intent> installPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.StartActivityForResult(),
-            result -> {
-                checkAndRequestStoragePermissions();
-            }
+            result -> checkAndRequestStoragePermissions()
     );
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         setupFullscreenTransparent();
         setContentView(R.layout.activity_main);
 
+        prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         initializeViews();
         checkInstallUnknownAppsPermission();
     }
@@ -96,14 +120,9 @@ public class MainActivity extends AppCompatActivity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(Color.TRANSPARENT);
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-        }
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
     }
 
     private void checkInstallUnknownAppsPermission() {
@@ -118,14 +137,14 @@ public class MainActivity extends AppCompatActivity {
 
     private void showInstallPermissionDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Install Permission Required");
-        builder.setMessage("This app needs permission to install APK files. Please grant the 'Install unknown apps' permission to continue.");
-        builder.setPositiveButton("Grant Permission", (dialog, which) -> {
+        builder.setTitle(getString(R.string.install_permission_title));
+        builder.setMessage(getString(R.string.install_permission_message));
+        builder.setPositiveButton(getString(R.string.grant_permission), (dialog, which) -> {
             Intent intent = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES);
             intent.setData(Uri.parse("package:" + getPackageName()));
             installPermissionLauncher.launch(intent);
         });
-        builder.setNegativeButton("Cancel", (dialog, which) -> finish());
+        builder.setNegativeButton(getString(R.string.cancel), (dialog, which) -> finish());
         builder.setCancelable(false);
         builder.show();
     }
@@ -133,47 +152,104 @@ public class MainActivity extends AppCompatActivity {
     private void initializeViews() {
         gameSelectionLayout = findViewById(R.id.gameSelectionLayout);
         mainContentLayout = findViewById(R.id.mainContentLayout);
+        logViewerLayout = findViewById(R.id.logViewerLayout);
         statusText = findViewById(R.id.statusText);
+        logContentText = findViewById(R.id.logContentText);
         downloadButton = findViewById(R.id.downloadButton);
         reinstallButton = findViewById(R.id.reinstallButton);
+        openLogButton = findViewById(R.id.openLogButton);
+        logBackButton = findViewById(R.id.logBackButton);
+        copyLogButton = findViewById(R.id.copyLogButton);
+        logScrollView = findViewById(R.id.logScrollView);
 
-        View legacyOption = findViewById(R.id.legacyOption);
-        View newPlayerOption = findViewById(R.id.newPlayerOption);
-        View enhancedGraphicsOption = findViewById(R.id.enhancedGraphicsOption);
+        findViewById(R.id.legacyOption).setOnClickListener(v -> downloadLegacyEchoVr());
+        findViewById(R.id.newPlayerOption).setOnClickListener(v -> showNewPlayerDialog());
+        findViewById(R.id.enhancedGraphicsOption).setOnClickListener(v -> downloadEnhancedGraphicsPackage());
 
-        if (legacyOption != null) {
-            legacyOption.setOnClickListener(v -> downloadLegacyEchoVr());
+        downloadButton.setOnClickListener(v -> startDataDownload());
+        reinstallButton.setOnClickListener(v -> showReinstallConfirmation());
+        openLogButton.setOnClickListener(v -> openRecentLog());
+        logBackButton.setOnClickListener(v -> showMainContentScreen());
+        copyLogButton.setOnClickListener(v -> copyLogToClipboard());
+    }
+
+    private void copyLogToClipboard() {
+        if (TextUtils.isEmpty(currentLogContent)) {
+            Toast.makeText(this, R.string.no_log_content, Toast.LENGTH_SHORT).show();
+            return;
         }
 
-        if (newPlayerOption != null) {
-            newPlayerOption.setOnClickListener(v -> showNewPlayerDialog());
-        }
+        try {
+            String textToCopy = getSafeCopyText(currentLogContent);
 
-        if (enhancedGraphicsOption != null) {
-            enhancedGraphicsOption.setOnClickListener(v -> downloadEnhancedGraphicsPackage());
-        }
+            ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) {
+                ClipData clip = ClipData.newPlainText("Echo VR Log", textToCopy);
+                clipboard.setPrimaryClip(clip);
 
-        if (downloadButton != null) {
-            downloadButton.setOnClickListener(v -> startDataDownload());
-        }
-
-        if (reinstallButton != null) {
-            reinstallButton.setOnClickListener(v -> showReinstallConfirmation());
+                // Show appropriate message based on copy size
+                if (textToCopy.length() < currentLogContent.length()) {
+                    Toast.makeText(this, getString(R.string.truncated_copy_message, MAX_LINES_TO_COPY), Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, R.string.log_copied, Toast.LENGTH_SHORT).show();
+                }
+            } else {
+                Toast.makeText(this, R.string.clipboard_unavailable, Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Clipboard copy error: " + e.getMessage());
+            Toast.makeText(this, getString(R.string.copy_failed, e.getMessage()), Toast.LENGTH_SHORT).show();
         }
     }
 
+    private String getSafeCopyText(String fullText) {
+        if (TextUtils.isEmpty(fullText)) {
+            return "";
+        }
+
+        // Check size first
+        if (fullText.length() <= MAX_CLIPBOARD_SIZE) {
+            return fullText;
+        }
+
+        // If too large, limit by lines
+        String[] lines = fullText.split("\n");
+        if (lines.length <= MAX_LINES_TO_COPY) {
+            // Still too large even with line limit, truncate by size
+            return fullText.substring(0, MAX_CLIPBOARD_SIZE) + "\n\n" + getString(R.string.truncated_size_message);
+        }
+
+        return buildLimitedText(lines);
+    }
+
+    private String buildLimitedText(String[] lines) {
+        StringBuilder limitedText = new StringBuilder();
+        int linesAdded = 0;
+        for (String line : lines) {
+            if (linesAdded >= MAX_LINES_TO_COPY) {
+                break;
+            }
+            limitedText.append(line).append("\n");
+            linesAdded++;
+
+            // Also check total size during building
+            if (limitedText.length() >= MAX_CLIPBOARD_SIZE) {
+                break;
+            }
+        }
+
+        limitedText.append("\n\n").append(getString(R.string.truncated_lines_message, linesAdded, lines.length));
+        return limitedText.toString();
+    }
+
     private void showReinstallConfirmation() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Reinstall Game Data");
-        builder.setMessage("This will download and reinstall all game data files. This may take several minutes. Continue?");
-        builder.setPositiveButton("Reinstall", (dialog, which) -> {
-            startDataDownload();
-        });
-        builder.setNegativeButton("Cancel", (dialog, which) -> {
-            // Simply dismiss
-        });
-        builder.setCancelable(true);
-        builder.show();
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.reinstall_title)
+                .setMessage(R.string.reinstall_message)
+                .setPositiveButton(R.string.reinstall, (dialog, which) -> startDataDownload())
+                .setNegativeButton(R.string.cancel, null)
+                .setCancelable(true)
+                .show();
     }
 
     private void checkAndRequestStoragePermissions() {
@@ -186,19 +262,18 @@ public class MainActivity extends AppCompatActivity {
             if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(this,
-                        new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE},
-                        1001);
+                        new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1001);
                 return;
             }
         }
-        showGameSelectionScreen();
+        checkInitialEchoVrInstallation();
     }
 
     private void showStoragePermissionDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Storage Permission Required");
-        builder.setMessage("This app needs storage permission to download and install game files.");
-        builder.setPositiveButton("Grant Permission", (dialog, which) -> {
+        builder.setTitle(R.string.storage_permission_title);
+        builder.setMessage(R.string.storage_permission_message);
+        builder.setPositiveButton(R.string.grant_permission, (dialog, which) -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 try {
                     Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
@@ -210,7 +285,7 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-        builder.setNegativeButton("Cancel", (dialog, which) -> finish());
+        builder.setNegativeButton(R.string.cancel, (dialog, which) -> finish());
         builder.setCancelable(false);
         builder.show();
     }
@@ -218,12 +293,10 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == 1001 && grantResults.length > 0) {
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                showGameSelectionScreen();
-            } else {
-                finish();
-            }
+        if (requestCode == 1001 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            checkInitialEchoVrInstallation();
+        } else {
+            finish();
         }
     }
 
@@ -238,16 +311,27 @@ public class MainActivity extends AppCompatActivity {
 
     private void showGameSelectionScreen() {
         mainHandler.post(() -> {
-            if (gameSelectionLayout != null) gameSelectionLayout.setVisibility(View.VISIBLE);
-            if (mainContentLayout != null) mainContentLayout.setVisibility(View.GONE);
+            gameSelectionLayout.setVisibility(View.VISIBLE);
+            mainContentLayout.setVisibility(View.GONE);
+            logViewerLayout.setVisibility(View.GONE);
         });
     }
 
     private void showMainContentScreen() {
         mainHandler.post(() -> {
-            if (gameSelectionLayout != null) gameSelectionLayout.setVisibility(View.GONE);
-            if (mainContentLayout != null) mainContentLayout.setVisibility(View.VISIBLE);
+            gameSelectionLayout.setVisibility(View.GONE);
+            mainContentLayout.setVisibility(View.VISIBLE);
+            logViewerLayout.setVisibility(View.GONE);
             checkDataStatus();
+            checkAndShowPermissionPopupAfterInstall();
+        });
+    }
+
+    private void showLogViewerScreen() {
+        mainHandler.post(() -> {
+            gameSelectionLayout.setVisibility(View.GONE);
+            mainContentLayout.setVisibility(View.GONE);
+            logViewerLayout.setVisibility(View.VISIBLE);
         });
     }
 
@@ -263,7 +347,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showNewPlayerDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("New Player Installation");
+        builder.setTitle(R.string.new_player_title);
 
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
@@ -271,7 +355,7 @@ public class MainActivity extends AppCompatActivity {
         mainLayout.setBackgroundColor(Color.parseColor("#1a237e"));
 
         TextView title = new TextView(this);
-        title.setText("Get Echo VR APK");
+        title.setText(R.string.get_apk_title);
         title.setTextColor(Color.WHITE);
         title.setTextSize(20);
         title.setTypeface(null, Typeface.BOLD);
@@ -280,7 +364,7 @@ public class MainActivity extends AppCompatActivity {
         mainLayout.addView(title);
 
         TextView instruction = new TextView(this);
-        instruction.setText("Join the Echo VR community Discord to get the latest APK file:");
+        instruction.setText(R.string.join_discord_message);
         instruction.setTextColor(Color.LTGRAY);
         instruction.setTextSize(14);
         instruction.setPadding(0, 0, 0, 10);
@@ -288,7 +372,7 @@ public class MainActivity extends AppCompatActivity {
         mainLayout.addView(instruction);
 
         TextView discordLink = new TextView(this);
-        discordLink.setText("https://discord.gg/NusGw8bjsC");
+        discordLink.setText(R.string.discord_url);
         discordLink.setTextColor(Color.parseColor("#4fc3f7"));
         discordLink.setTextSize(14);
         discordLink.setTypeface(null, Typeface.BOLD);
@@ -298,22 +382,20 @@ public class MainActivity extends AppCompatActivity {
         mainLayout.addView(discordLink);
 
         TextView inputLabel = new TextView(this);
-        inputLabel.setText("Paste APK download URL:");
+        inputLabel.setText(R.string.paste_url_label);
         inputLabel.setTextColor(Color.LTGRAY);
         inputLabel.setTextSize(12);
         inputLabel.setPadding(0, 0, 0, 10);
         mainLayout.addView(inputLabel);
 
         EditText apkUrlInput = new EditText(this);
-        apkUrlInput.setHint("https://example.com/echo_vr.apk");
+        apkUrlInput.setHint(R.string.url_hint);
         apkUrlInput.setTextColor(Color.WHITE);
         apkUrlInput.setHintTextColor(Color.GRAY);
         apkUrlInput.setBackgroundColor(Color.parseColor("#37474f"));
         apkUrlInput.setPadding(20, 15, 20, 15);
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-        );
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         inputParams.setMargins(0, 0, 0, 20);
         apkUrlInput.setLayoutParams(inputParams);
         mainLayout.addView(apkUrlInput);
@@ -323,7 +405,7 @@ public class MainActivity extends AppCompatActivity {
         buttonLayout.setGravity(Gravity.CENTER);
 
         Button cancelBtn = new Button(this);
-        cancelBtn.setText("Cancel");
+        cancelBtn.setText(R.string.cancel);
         cancelBtn.setTextColor(Color.WHITE);
         cancelBtn.setBackgroundColor(Color.parseColor("#f44336"));
         cancelBtn.setPadding(30, 12, 30, 12);
@@ -332,7 +414,7 @@ public class MainActivity extends AppCompatActivity {
         cancelBtn.setLayoutParams(cancelParams);
 
         Button installBtn = new Button(this);
-        installBtn.setText("Install");
+        installBtn.setText(R.string.install);
         installBtn.setTextColor(Color.WHITE);
         installBtn.setBackgroundColor(Color.parseColor("#4caf50"));
         installBtn.setPadding(30, 12, 30, 12);
@@ -347,10 +429,7 @@ public class MainActivity extends AppCompatActivity {
         builder.setView(mainLayout);
         AlertDialog dialog = builder.create();
 
-        cancelBtn.setOnClickListener(v -> {
-            dialog.dismiss();
-        });
-
+        cancelBtn.setOnClickListener(v -> dialog.dismiss());
         installBtn.setOnClickListener(v -> {
             String url = apkUrlInput.getText().toString().trim();
             if (url.startsWith("http")) {
@@ -365,10 +444,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void openDiscordLink() {
         try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/NusGw8bjsC"));
-            startActivity(intent);
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(getString(R.string.discord_url))));
         } catch (Exception e) {
-            // No toast on error
+            // Silent fail
         }
     }
 
@@ -378,14 +456,14 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        showProgressDialog("Downloading Echo VR APK...");
+        showProgressDialog(getString(R.string.downloading_apk));
         executorService.execute(() -> {
             File apkFile = downloadApkFile(currentApkUrl);
             mainHandler.post(() -> {
                 if (apkFile != null) {
                     installApkFile(apkFile);
                 } else {
-                    showResult(false, "APK download failed");
+                    showResult(false, getString(R.string.apk_download_failed));
                 }
             });
         });
@@ -418,8 +496,8 @@ public class MainActivity extends AppCompatActivity {
             String fileName = apkUrl.equals(ENHANCED_GRAPHICS_URL) ? "echo_vr_enhanced.apk" : "echo_vr.apk";
             File apkFile = new File(apkDir, fileName);
 
-            if (apkFile.exists()) {
-                apkFile.delete();
+            if (apkFile.exists() && !apkFile.delete()) {
+                Log.w(TAG, "Failed to delete existing APK file");
             }
 
             input = connection.getInputStream();
@@ -436,8 +514,8 @@ public class MainActivity extends AppCompatActivity {
 
                 if (contentLength > 0) {
                     int progress = (int) ((totalDownloaded * 100) / contentLength);
-                    String apkType = apkUrl.equals(ENHANCED_GRAPHICS_URL) ? "Enhanced APK" : "APK";
-                    updateProgress(progress, "Downloading " + apkType + ": " + progress + "%");
+                    String apkType = apkUrl.equals(ENHANCED_GRAPHICS_URL) ? getString(R.string.enhanced_apk) : getString(R.string.apk);
+                    updateProgress(progress, getString(R.string.downloading_progress, apkType, progress));
                 }
             }
 
@@ -460,14 +538,12 @@ public class MainActivity extends AppCompatActivity {
 
     private void installApkFile(File apkFile) {
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-                    !getPackageManager().canRequestPackageInstalls()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
                 showInstallPermissionDialog();
                 return;
             }
 
             Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", apkFile);
-
             Intent installIntent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
             installIntent.setData(apkUri);
             installIntent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -476,29 +552,186 @@ public class MainActivity extends AppCompatActivity {
 
             if (installIntent.resolveActivity(getPackageManager()) != null) {
                 startActivity(installIntent);
+                justInstalledEchoVr = true;
                 mainHandler.postDelayed(this::checkEchoVrInstallation, 3000);
                 dismissProgressDialog();
             } else {
-                showResult(false, "No installer app found");
+                showResult(false, getString(R.string.no_installer_app));
             }
 
         } catch (Exception e) {
-            showResult(false, "Installation failed");
+            showResult(false, getString(R.string.installation_failed));
             Log.e(TAG, "Installation error: " + e.getMessage());
+        }
+    }
+
+    private void checkInitialEchoVrInstallation() {
+        boolean isInstalled = isPackageInstalled(ECHO_VR_PACKAGE);
+        if (isInstalled) {
+            echoVrInstalled = true;
+            showMainContentScreen();
+        } else {
+            echoVrInstalled = false;
+            boolean popupShown = prefs.getBoolean(PREF_PERMISSION_POPUP_SHOWN, false);
+            if (popupShown) {
+                prefs.edit().remove(PREF_PERMISSION_POPUP_SHOWN).apply();
+                Log.d(TAG, "Cleared permission popup cache - Echo VR not installed");
+            }
+            showGameSelectionScreen();
         }
     }
 
     private void checkEchoVrInstallation() {
         boolean isInstalled = isPackageInstalled(ECHO_VR_PACKAGE);
-
         mainHandler.post(() -> {
             if (isInstalled) {
                 echoVrInstalled = true;
                 showMainContentScreen();
             } else {
                 echoVrInstalled = false;
+                boolean popupShown = prefs.getBoolean(PREF_PERMISSION_POPUP_SHOWN, false);
+                if (popupShown) {
+                    prefs.edit().remove(PREF_PERMISSION_POPUP_SHOWN).apply();
+                    Log.d(TAG, "Cleared permission popup cache - Echo VR uninstalled");
+                }
             }
         });
+    }
+
+    private void checkAndShowPermissionPopupAfterInstall() {
+        boolean popupShown = prefs.getBoolean(PREF_PERMISSION_POPUP_SHOWN, false);
+        if (justInstalledEchoVr && !popupShown) {
+            showEchoVrPermissionPopup();
+        }
+        justInstalledEchoVr = false;
+    }
+
+    private void showEchoVrPermissionPopup() {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.grant_permissions_title)
+                .setMessage(R.string.grant_permissions_message)
+                .setPositiveButton(R.string.open_settings, (dialog, which) -> {
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    intent.setData(Uri.parse("package:" + ECHO_VR_PACKAGE));
+                    startActivity(intent);
+                })
+                .setNegativeButton(R.string.later, null)
+                .setCancelable(false)
+                .show();
+
+        prefs.edit().putBoolean(PREF_PERMISSION_POPUP_SHOWN, true).apply();
+        Log.d(TAG, "Permission popup shown and cached");
+    }
+
+    private void openRecentLog() {
+        showProgressDialog(getString(R.string.loading_log));
+        executorService.execute(() -> {
+            try {
+                File logFile = findMostRecentLogFile();
+                if (logFile != null && logFile.exists()) {
+                    String logContent = readLogFile(logFile);
+                    currentLogContent = logContent;
+                    mainHandler.post(() -> {
+                        dismissProgressDialog();
+                        logContentText.setText(logContent);
+                        showLogViewerScreen();
+                        autoFitLogText();
+                    });
+                } else {
+                    mainHandler.post(() -> {
+                        dismissProgressDialog();
+                        showResult(false, getString(R.string.no_log_files));
+                    });
+                }
+            } catch (Exception e) {
+                mainHandler.post(() -> {
+                    dismissProgressDialog();
+                    showResult(false, getString(R.string.error_reading_log, e.getMessage()));
+                });
+            }
+        });
+    }
+
+    private void autoFitLogText() {
+        logContentText.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                logContentText.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+
+                int availableWidth = logScrollView.getWidth() - logScrollView.getPaddingLeft() - logScrollView.getPaddingRight() - 10;
+                float optimalSize = calculateOptimalTextSize(logContentText.getText().toString(), availableWidth);
+                logContentText.setTextSize(TypedValue.COMPLEX_UNIT_SP, optimalSize);
+            }
+        });
+    }
+
+    private float calculateOptimalTextSize(String text, int availableWidth) {
+        if (TextUtils.isEmpty(text)) return 11f;
+
+        String[] lines = text.split("\n");
+        float maxLineWidth = 0;
+        float testSize = 11f;
+
+        android.text.TextPaint testPaint = new android.text.TextPaint();
+        testPaint.setTypeface(Typeface.MONOSPACE);
+
+        for (String line : lines) {
+            testPaint.setTextSize(testSize);
+            float lineWidth = testPaint.measureText(line);
+            if (lineWidth > maxLineWidth) {
+                maxLineWidth = lineWidth;
+            }
+        }
+
+        if (maxLineWidth <= availableWidth) {
+            return testSize;
+        }
+
+        float scaleFactor = availableWidth / maxLineWidth;
+        float optimalSize = testSize * scaleFactor;
+
+        return Math.max(8f, Math.min(13f, optimalSize));
+    }
+
+    private File findMostRecentLogFile() {
+        File logDir = new File(Environment.getExternalStorageDirectory(), LOG_DIRECTORY);
+        if (!logDir.exists() || !logDir.isDirectory()) {
+            Log.e(TAG, "Log directory not found: " + logDir.getPath());
+            return null;
+        }
+
+        File[] logFiles = logDir.listFiles((dir, name) ->
+                name.toLowerCase().endsWith(".log") || name.toLowerCase().endsWith(".txt")
+        );
+
+        if (logFiles == null || logFiles.length == 0) {
+            Log.e(TAG, "No log files found in directory");
+            return null;
+        }
+
+        File mostRecent = null;
+        for (File file : logFiles) {
+            if (mostRecent == null || file.lastModified() > mostRecent.lastModified()) {
+                mostRecent = file;
+            }
+        }
+
+        Log.d(TAG, "Found most recent log file: " + (mostRecent != null ? mostRecent.getName() : "null"));
+        return mostRecent;
+    }
+
+    private String readLogFile(File logFile) {
+        StringBuilder content = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new FileReader(logFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                content.append(line).append("\n");
+            }
+        } catch (IOException e) {
+            Log.e(TAG, "Error reading log file: " + e.getMessage());
+            return getString(R.string.error_reading_log, e.getMessage());
+        }
+        return content.toString();
     }
 
     private boolean isPackageInstalled(String packageName) {
@@ -511,11 +744,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void startDataDownload() {
-        if (hasStoragePermissions()) {
-            if (isExternalStorageWritable()) {
-                showProgressDialog("Downloading game data...");
-                executorService.execute(this::downloadAndExtractGameData);
-            }
+        if (hasStoragePermissions() && isExternalStorageWritable()) {
+            showProgressDialog(getString(R.string.downloading_data));
+            executorService.execute(this::downloadAndExtractGameData);
         } else {
             checkAndRequestStoragePermissions();
         }
@@ -529,21 +760,21 @@ public class MainActivity extends AppCompatActivity {
         try {
             File zipFile = downloadGameDataFile();
             if (zipFile == null) {
-                showResult(false, "Download failed");
+                showResult(false, getString(R.string.download_failed));
                 return;
             }
 
-            updateProgress(-1, "Extracting data...");
+            updateProgress(-1, getString(R.string.extracting_data));
             boolean extractionSuccess = extractZipFile(zipFile);
 
             if (extractionSuccess) {
-                showResult(true, "Installation complete");
+                showResult(true, getString(R.string.installation_complete));
             } else {
-                showResult(false, "Extraction failed");
+                showResult(false, getString(R.string.extraction_failed));
             }
 
         } catch (Exception e) {
-            showResult(false, "Installation error");
+            showResult(false, getString(R.string.installation_error));
             Log.e(TAG, "Data download error: " + e.getMessage());
         }
     }
@@ -576,8 +807,8 @@ public class MainActivity extends AppCompatActivity {
             }
 
             File zipFile = new File(dataDir, "game_data.zip");
-            if (zipFile.exists()) {
-                zipFile.delete();
+            if (zipFile.exists() && !zipFile.delete()) {
+                Log.w(TAG, "Failed to delete existing zip file");
             }
 
             input = connection.getInputStream();
@@ -593,8 +824,7 @@ public class MainActivity extends AppCompatActivity {
 
                 int progress = (int) ((totalDownloaded * 100) / fileSize);
                 long mbDownloaded = totalDownloaded / (1024 * 1024);
-                String message = "Downloading: " + progress + "% (" + mbDownloaded + "MB)";
-                updateProgress(progress, message);
+                updateProgress(progress, getString(R.string.downloading_data_progress, progress, mbDownloaded));
             }
 
             output.flush();
@@ -621,7 +851,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         File targetDir = new File(Environment.getExternalStorageDirectory(), TARGET_DIR);
-
         if (!targetDir.exists() && !targetDir.mkdirs()) {
             Log.e(TAG, "Failed to create target directory: " + targetDir.getPath());
             return false;
@@ -637,7 +866,6 @@ public class MainActivity extends AppCompatActivity {
                 if (entry.isDirectory()) {
                     if (!outputFile.exists() && !outputFile.mkdirs()) {
                         Log.e(TAG, "Failed to create directory: " + outputFile.getPath());
-                        continue;
                     }
                 } else {
                     File parentDir = outputFile.getParentFile();
@@ -648,7 +876,6 @@ public class MainActivity extends AppCompatActivity {
 
                     try (FileOutputStream fos = new FileOutputStream(outputFile);
                          BufferedOutputStream bos = new BufferedOutputStream(fos, buffer.length)) {
-
                         int length;
                         while ((length = zis.read(buffer)) > 0) {
                             bos.write(buffer, 0, length);
@@ -659,8 +886,7 @@ public class MainActivity extends AppCompatActivity {
                 zis.closeEntry();
             }
 
-            boolean zipDeleted = zipFile.delete();
-            if (!zipDeleted) {
+            if (!zipFile.delete()) {
                 Log.w(TAG, "Failed to delete ZIP file after extraction");
             }
             return true;
@@ -675,9 +901,8 @@ public class MainActivity extends AppCompatActivity {
         File dataDir = new File(Environment.getExternalStorageDirectory(), TARGET_DIR + "/" + DATA_FOLDER);
         boolean dataExists = dataDir.exists() && dataDir.isDirectory();
         File[] files = dataExists ? dataDir.listFiles() : null;
-        int fileCount = files != null ? files.length : 0;
 
-        if (fileCount > 0) {
+        if (files != null && files.length > 0) {
             showDataInstalled();
         } else {
             showDataMissing();
@@ -686,7 +911,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showDataInstalled() {
         mainHandler.post(() -> {
-            statusText.setText("Game data installed");
+            statusText.setText(R.string.data_installed);
             statusText.setTextColor(Color.parseColor("#4caf50"));
             downloadButton.setVisibility(View.GONE);
             reinstallButton.setVisibility(View.VISIBLE);
@@ -695,11 +920,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void showDataMissing() {
         mainHandler.post(() -> {
-            statusText.setText("Game data not installed");
+            statusText.setText(R.string.data_missing);
             statusText.setTextColor(Color.parseColor("#ff9800"));
             downloadButton.setVisibility(View.VISIBLE);
             reinstallButton.setVisibility(View.GONE);
-            downloadButton.setText("DOWNLOAD GAME DATA (937MB)");
         });
     }
 
@@ -713,7 +937,7 @@ public class MainActivity extends AppCompatActivity {
             if (progressText != null) progressText.setText(message);
 
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle("Echo VR Installer");
+            builder.setTitle(R.string.installer_title);
             builder.setView(dialogView);
             builder.setCancelable(false);
 
@@ -750,6 +974,12 @@ public class MainActivity extends AppCompatActivity {
             dismissProgressDialog();
             if (success) {
                 checkDataStatus();
+            } else {
+                new AlertDialog.Builder(this)
+                        .setTitle(R.string.error_title)
+                        .setMessage(message)
+                        .setPositiveButton(R.string.ok, null)
+                        .show();
             }
         });
     }
