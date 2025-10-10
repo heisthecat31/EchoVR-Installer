@@ -195,6 +195,16 @@
             android:layout_marginTop="30dp"
             android:lineSpacingExtra="2dp" />
 
+        <!-- Added credit text - BOLDER -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Installer was made by he_is_the_cat"
+            android:textColor="#bb86fc"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginTop="20dp" />
+
     </LinearLayout>
 
     <LinearLayout
@@ -304,6 +314,16 @@
             android:textColor="#bbdefb"
             android:textSize="10sp"
             android:layout_marginTop="12dp" />
+
+        <!-- Added credit text - BOLDER -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Installer was made by he_is_the_cat"
+            android:textColor="#bb86fc"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:layout_marginTop="20dp" />
 
     </LinearLayout>
 
