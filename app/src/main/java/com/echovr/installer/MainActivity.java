@@ -57,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private Button downloadButton;
     private Button reinstallButton;
     private Button openLogButton;
+    private Button launchEchoVRButton;
     private Button logBackButton;
     private Button copyLogButton;
     private ScrollView logScrollView;
@@ -163,6 +164,7 @@ public class MainActivity extends AppCompatActivity {
         downloadButton = findViewById(R.id.downloadButton);
         reinstallButton = findViewById(R.id.reinstallButton);
         openLogButton = findViewById(R.id.openLogButton);
+        launchEchoVRButton = findViewById(R.id.launchEchoVRButton);
         logBackButton = findViewById(R.id.logBackButton);
         copyLogButton = findViewById(R.id.copyLogButton);
         logScrollView = findViewById(R.id.logScrollView);
@@ -170,12 +172,31 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.legacyOption).setOnClickListener(v -> downloadLegacyEchoVr());
         findViewById(R.id.newPlayerOption).setOnClickListener(v -> showNewPlayerDialog());
         findViewById(R.id.enhancedGraphicsOption).setOnClickListener(v -> downloadEnhancedGraphicsPackage());
-        
+
         downloadButton.setOnClickListener(v -> startDataDownload());
         reinstallButton.setOnClickListener(v -> showReinstallConfirmation());
         openLogButton.setOnClickListener(v -> openRecentLog());
+        launchEchoVRButton.setOnClickListener(v -> launchEchoVR());
         logBackButton.setOnClickListener(v -> showMainContentScreen());
         copyLogButton.setOnClickListener(v -> copyLogToClipboard());
+
+        // Initially hide these buttons until game data is installed
+        openLogButton.setVisibility(View.GONE);
+        launchEchoVRButton.setVisibility(View.GONE);
+    }
+
+    private void launchEchoVR() {
+        try {
+            Intent launchIntent = getPackageManager().getLaunchIntentForPackage(ECHO_VR_PACKAGE);
+            if (launchIntent != null) {
+                startActivity(launchIntent);
+            } else {
+                // Echo VR is not installed
+                Toast.makeText(this, "Echo VR is not installed", Toast.LENGTH_SHORT).show();
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "Error launching Echo VR: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void copyLogToClipboard() {
@@ -186,12 +207,12 @@ public class MainActivity extends AppCompatActivity {
 
         try {
             String textToCopy = getSafeCopyText(currentLogContent);
-            
+
             ClipboardManager clipboard = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
             if (clipboard != null) {
                 ClipData clip = ClipData.newPlainText("Echo VR Log", textToCopy);
                 clipboard.setPrimaryClip(clip);
-                
+
                 // Show appropriate message based on copy size
                 if (textToCopy.length() < currentLogContent.length()) {
                     Toast.makeText(this, "First " + MAX_LINES_TO_COPY + " lines copied (full log too large)", Toast.LENGTH_LONG).show();
@@ -211,19 +232,19 @@ public class MainActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(fullText)) {
             return "";
         }
-        
+
         // Check size first
         if (fullText.length() <= MAX_CLIPBOARD_SIZE) {
             return fullText;
         }
-        
+
         // If too large, limit by lines
         String[] lines = fullText.split("\n");
         if (lines.length <= MAX_LINES_TO_COPY) {
             // Still too large even with line limit, truncate by size
             return fullText.substring(0, MAX_CLIPBOARD_SIZE) + "\n\n[TRUNCATED - LOG TOO LARGE]";
         }
-        
+
         // Build text from first MAX_LINES_TO_COPY lines
         StringBuilder limitedText = new StringBuilder();
         int linesAdded = 0;
@@ -233,25 +254,25 @@ public class MainActivity extends AppCompatActivity {
             }
             limitedText.append(line).append("\n");
             linesAdded++;
-            
+
             // Also check total size during building
             if (limitedText.length() >= MAX_CLIPBOARD_SIZE) {
                 break;
             }
         }
-        
+
         limitedText.append("\n\n[TRUNCATED - SHOWING FIRST ").append(linesAdded).append(" LINES OF ").append(lines.length).append("]");
         return limitedText.toString();
     }
 
     private void showReinstallConfirmation() {
         new AlertDialog.Builder(this)
-            .setTitle("Reinstall Game Data")
-            .setMessage("This will download and reinstall all game data files. This may take several minutes. Continue?")
-            .setPositiveButton("Reinstall", (dialog, which) -> startDataDownload())
-            .setNegativeButton("Cancel", null)
-            .setCancelable(true)
-            .show();
+                .setTitle("Reinstall Game Data")
+                .setMessage("This will download and reinstall all game data files. This may take several minutes. Continue?")
+                .setPositiveButton("Reinstall", (dialog, which) -> startDataDownload())
+                .setNegativeButton("Cancel", null)
+                .setCancelable(true)
+                .show();
     }
 
     private void checkAndRequestStoragePermissions() {
@@ -608,17 +629,17 @@ public class MainActivity extends AppCompatActivity {
 
     private void showEchoVrPermissionPopup() {
         new AlertDialog.Builder(this)
-            .setTitle("Grant Echo VR Permissions")
-            .setMessage("For Echo VR to work properly, please grant it file permissions:\n\n" +
-                    "Go to: Settings → Apps → Echo VR → Permissions → Files and media → Allow management of all files")
-            .setPositiveButton("Open Settings", (dialog, which) -> {
-                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                intent.setData(Uri.parse("package:" + ECHO_VR_PACKAGE));
-                startActivity(intent);
-            })
-            .setNegativeButton("Later", null)
-            .setCancelable(false)
-            .show();
+                .setTitle("Grant Echo VR Permissions")
+                .setMessage("For Echo VR to work properly, please grant it file permissions:\n\n" +
+                        "Go to: Settings → Privacy → Installed Apps → Echo VR → Permissions → Allow all permissions")
+                .setPositiveButton("Open Settings", (dialog, which) -> {
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    intent.setData(Uri.parse("package:" + ECHO_VR_PACKAGE));
+                    startActivity(intent);
+                })
+                .setNegativeButton("Later", null)
+                .setCancelable(false)
+                .show();
 
         prefs.edit().putBoolean(PREF_PERMISSION_POPUP_SHOWN, true).apply();
         Log.d(TAG, "Permission popup shown and cached");
@@ -658,7 +679,7 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onGlobalLayout() {
                 logContentText.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                
+
                 int availableWidth = logScrollView.getWidth() - logScrollView.getPaddingLeft() - logScrollView.getPaddingRight() - 10;
                 float optimalSize = calculateOptimalTextSize(logContentText.getText().toString(), availableWidth);
                 logContentText.setTextSize(TypedValue.COMPLEX_UNIT_SP, optimalSize);
@@ -668,14 +689,14 @@ public class MainActivity extends AppCompatActivity {
 
     private float calculateOptimalTextSize(String text, int availableWidth) {
         if (TextUtils.isEmpty(text)) return 11f;
-        
+
         String[] lines = text.split("\n");
         float maxLineWidth = 0;
         float testSize = 11f;
-        
+
         android.text.TextPaint testPaint = new android.text.TextPaint();
         testPaint.setTypeface(Typeface.MONOSPACE);
-        
+
         for (String line : lines) {
             testPaint.setTextSize(testSize);
             float lineWidth = testPaint.measureText(line);
@@ -683,14 +704,14 @@ public class MainActivity extends AppCompatActivity {
                 maxLineWidth = lineWidth;
             }
         }
-        
+
         if (maxLineWidth <= availableWidth) {
             return testSize;
         }
-        
+
         float scaleFactor = availableWidth / maxLineWidth;
         float optimalSize = testSize * scaleFactor;
-        
+
         return Math.max(8f, Math.min(13f, optimalSize));
     }
 
@@ -701,8 +722,8 @@ public class MainActivity extends AppCompatActivity {
             return null;
         }
 
-        File[] logFiles = logDir.listFiles((dir, name) -> 
-            name.toLowerCase().endsWith(".log") || name.toLowerCase().endsWith(".txt")
+        File[] logFiles = logDir.listFiles((dir, name) ->
+                name.toLowerCase().endsWith(".log") || name.toLowerCase().endsWith(".txt")
         );
 
         if (logFiles == null || logFiles.length == 0) {
@@ -912,6 +933,9 @@ public class MainActivity extends AppCompatActivity {
             statusText.setTextColor(Color.parseColor("#4caf50"));
             downloadButton.setVisibility(View.GONE);
             reinstallButton.setVisibility(View.VISIBLE);
+            // Show these buttons only when game data is installed
+            openLogButton.setVisibility(View.VISIBLE);
+            launchEchoVRButton.setVisibility(View.VISIBLE);
         });
     }
 
@@ -921,6 +945,9 @@ public class MainActivity extends AppCompatActivity {
             statusText.setTextColor(Color.parseColor("#ff9800"));
             downloadButton.setVisibility(View.VISIBLE);
             reinstallButton.setVisibility(View.GONE);
+            // Hide these buttons when game data is missing
+            openLogButton.setVisibility(View.GONE);
+            launchEchoVRButton.setVisibility(View.GONE);
         });
     }
 
@@ -973,10 +1000,10 @@ public class MainActivity extends AppCompatActivity {
                 checkDataStatus();
             } else {
                 new AlertDialog.Builder(this)
-                    .setTitle("Error")
-                    .setMessage(message)
-                    .setPositiveButton("OK", null)
-                    .show();
+                        .setTitle("Error")
+                        .setMessage(message)
+                        .setPositiveButton("OK", null)
+                        .show();
             }
         });
     }
