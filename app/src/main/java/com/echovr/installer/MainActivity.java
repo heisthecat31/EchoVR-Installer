@@ -57,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     private Button downloadButton;
     private Button reinstallButton;
     private Button openLogButton;
+    private Button grantPermissionsButton;
     private Button launchEchoVRButton;
     private Button logBackButton;
     private Button copyLogButton;
@@ -79,9 +80,8 @@ public class MainActivity extends AppCompatActivity {
     private static final String PREFS_NAME = "EchoVRInstallerPrefs";
     private static final String PREF_PERMISSION_POPUP_SHOWN = "permission_popup_shown";
 
-    // Clipboard limits to prevent crashes
-    private static final int MAX_CLIPBOARD_SIZE = 100000; // ~100KB limit
-    private static final int MAX_LINES_TO_COPY = 1000; // Max lines to copy
+    private static final int MAX_CLIPBOARD_SIZE = 100000;
+    private static final int MAX_LINES_TO_COPY = 1000;
 
     private String currentApkUrl = "";
     private boolean echoVrInstalled = false;
@@ -164,6 +164,7 @@ public class MainActivity extends AppCompatActivity {
         downloadButton = findViewById(R.id.downloadButton);
         reinstallButton = findViewById(R.id.reinstallButton);
         openLogButton = findViewById(R.id.openLogButton);
+        grantPermissionsButton = findViewById(R.id.grantPermissionsButton);
         launchEchoVRButton = findViewById(R.id.launchEchoVRButton);
         logBackButton = findViewById(R.id.logBackButton);
         copyLogButton = findViewById(R.id.copyLogButton);
@@ -176,13 +177,24 @@ public class MainActivity extends AppCompatActivity {
         downloadButton.setOnClickListener(v -> startDataDownload());
         reinstallButton.setOnClickListener(v -> showReinstallConfirmation());
         openLogButton.setOnClickListener(v -> openRecentLog());
+        grantPermissionsButton.setOnClickListener(v -> grantEchoVRPermissions());
         launchEchoVRButton.setOnClickListener(v -> launchEchoVR());
         logBackButton.setOnClickListener(v -> showMainContentScreen());
         copyLogButton.setOnClickListener(v -> copyLogToClipboard());
 
-        // Initially hide these buttons until game data is installed
         openLogButton.setVisibility(View.GONE);
+        grantPermissionsButton.setVisibility(View.GONE);
         launchEchoVRButton.setVisibility(View.GONE);
+    }
+
+    private void grantEchoVRPermissions() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + ECHO_VR_PACKAGE));
+            startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(this, "Error opening permissions: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void launchEchoVR() {
@@ -191,7 +203,6 @@ public class MainActivity extends AppCompatActivity {
             if (launchIntent != null) {
                 startActivity(launchIntent);
             } else {
-                // Echo VR is not installed
                 Toast.makeText(this, "Echo VR is not installed", Toast.LENGTH_SHORT).show();
             }
         } catch (Exception e) {
@@ -213,7 +224,6 @@ public class MainActivity extends AppCompatActivity {
                 ClipData clip = ClipData.newPlainText("Echo VR Log", textToCopy);
                 clipboard.setPrimaryClip(clip);
 
-                // Show appropriate message based on copy size
                 if (textToCopy.length() < currentLogContent.length()) {
                     Toast.makeText(this, "First " + MAX_LINES_TO_COPY + " lines copied (full log too large)", Toast.LENGTH_LONG).show();
                 } else {
@@ -233,19 +243,15 @@ public class MainActivity extends AppCompatActivity {
             return "";
         }
 
-        // Check size first
         if (fullText.length() <= MAX_CLIPBOARD_SIZE) {
             return fullText;
         }
 
-        // If too large, limit by lines
         String[] lines = fullText.split("\n");
         if (lines.length <= MAX_LINES_TO_COPY) {
-            // Still too large even with line limit, truncate by size
             return fullText.substring(0, MAX_CLIPBOARD_SIZE) + "\n\n[TRUNCATED - LOG TOO LARGE]";
         }
 
-        // Build text from first MAX_LINES_TO_COPY lines
         StringBuilder limitedText = new StringBuilder();
         int linesAdded = 0;
         for (String line : lines) {
@@ -255,7 +261,6 @@ public class MainActivity extends AppCompatActivity {
             limitedText.append(line).append("\n");
             linesAdded++;
 
-            // Also check total size during building
             if (limitedText.length() >= MAX_CLIPBOARD_SIZE) {
                 break;
             }
@@ -469,7 +474,6 @@ public class MainActivity extends AppCompatActivity {
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://discord.gg/NusGw8bjsC")));
         } catch (Exception e) {
-            // Silent fail
         }
     }
 
@@ -933,8 +937,8 @@ public class MainActivity extends AppCompatActivity {
             statusText.setTextColor(Color.parseColor("#4caf50"));
             downloadButton.setVisibility(View.GONE);
             reinstallButton.setVisibility(View.VISIBLE);
-            // Show these buttons only when game data is installed
             openLogButton.setVisibility(View.VISIBLE);
+            grantPermissionsButton.setVisibility(View.VISIBLE);
             launchEchoVRButton.setVisibility(View.VISIBLE);
         });
     }
@@ -945,8 +949,8 @@ public class MainActivity extends AppCompatActivity {
             statusText.setTextColor(Color.parseColor("#ff9800"));
             downloadButton.setVisibility(View.VISIBLE);
             reinstallButton.setVisibility(View.GONE);
-            // Hide these buttons when game data is missing
             openLogButton.setVisibility(View.GONE);
+            grantPermissionsButton.setVisibility(View.GONE);
             launchEchoVRButton.setVisibility(View.GONE);
         });
     }
