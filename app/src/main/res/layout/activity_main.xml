@@ -304,6 +304,19 @@
             android:textSize="12sp"
             android:textStyle="bold"
             android:background="@drawable/download_button_background"
+            android:visibility="gone"
+            android:layout_marginBottom="12dp" />
+
+        <Button
+            android:id="@+id/grantPermissionsButton"
+            android:layout_width="280dp"
+            android:layout_height="45dp"
+            android:text="GRANT ECHO VR PERMISSIONS"
+            android:textColor="#ffffff"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:background="@drawable/download_button_background"
+            android:visibility="gone"
             android:layout_marginBottom="12dp" />
 
         <Button
@@ -315,6 +328,7 @@
             android:textSize="12sp"
             android:textStyle="bold"
             android:background="@drawable/download_button_background"
+            android:visibility="gone"
             android:layout_marginBottom="12dp" />
 
         <TextView
