@@ -20,10 +20,10 @@ import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.method.LinkMovementMethod;
 import android.text.style.ClickableSpan;
+import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
-import android.view.Gravity;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -191,6 +191,8 @@ public class MainActivity extends AppCompatActivity {
         clearCacheButton.setVisibility(View.GONE);
     }
 
+    // ===== PERMISSION AND INSTALLATION METHODS =====
+
     private void checkAndRequestStoragePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (!Environment.isExternalStorageManager()) {
@@ -247,6 +249,8 @@ public class MainActivity extends AppCompatActivity {
                     == PackageManager.PERMISSION_GRANTED;
         }
     }
+
+    // ===== SCREEN NAVIGATION METHODS =====
 
     private void showGameSelectionScreen() {
         mainHandler.post(() -> {
@@ -334,7 +338,7 @@ public class MainActivity extends AppCompatActivity {
         apkUrlInput.setPadding(25, 20, 25, 20);
         apkUrlInput.setTextSize(14);
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         inputParams.setMargins(0, 0, 0, 25);
         apkUrlInput.setLayoutParams(inputParams);
         mainLayout.addView(apkUrlInput);
@@ -692,7 +696,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ===== IMPROVED DATA INSTALLATION DETECTION =====
 
     private boolean verifyDataInstallation() {
         File baseDataDir = new File(Environment.getExternalStorageDirectory(), TARGET_DIR + "/" + DATA_FOLDER);
@@ -740,7 +743,10 @@ public class MainActivity extends AppCompatActivity {
             downloadButton.setVisibility(View.GONE);
             reinstallButton.setVisibility(View.VISIBLE);
             grantPermissionsButton.setVisibility(View.VISIBLE);
-            launchEchoVRButton.setVisibility(View.VISIBLE);
+
+            boolean hasPermissions = hasEchoVRFilePermissions();
+            launchEchoVRButton.setVisibility(hasPermissions ? View.VISIBLE : View.GONE);
+
             clearCacheButton.setVisibility(View.VISIBLE);
             checkUpdatesButton.setVisibility(View.VISIBLE);
         });
@@ -757,6 +763,29 @@ public class MainActivity extends AppCompatActivity {
             clearCacheButton.setVisibility(View.VISIBLE);
             checkUpdatesButton.setVisibility(View.VISIBLE);
         });
+    }
+
+
+    private boolean hasEchoVRFilePermissions() {
+        if (!isPackageInstalled(ECHO_VR_PACKAGE)) {
+            return false;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                return Environment.isExternalStorageManager();
+            } catch (Exception e) {
+                return false;
+            }
+        } else {
+            try {
+                int permissionCheck = getPackageManager().checkPermission(
+                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE, ECHO_VR_PACKAGE);
+                return permissionCheck == PackageManager.PERMISSION_GRANTED;
+            } catch (Exception e) {
+                return false;
+            }
+        }
     }
 
 
@@ -1172,6 +1201,8 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if (!echoVrInstalled) {
             checkEchoVrInstallation();
+        } else {
+            checkDataStatus();
         }
     }
 
