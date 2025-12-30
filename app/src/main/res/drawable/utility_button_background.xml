@@ -10,6 +10,6 @@
         android:color="#202020" />
         
     <corners
-        android:radius="6dp" />
+        android:radius="20dp" />
         
 </shape>
