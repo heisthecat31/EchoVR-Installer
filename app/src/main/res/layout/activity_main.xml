@@ -46,7 +46,6 @@
 
         </LinearLayout>
 
-
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -183,20 +182,21 @@
 
         <!-- Utility Buttons for Game Selection Screen -->
         <LinearLayout
-            android:layout_width="280dp"
+            android:layout_width="300dp"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
+            android:gravity="center"
             android:layout_marginTop="12dp"
             android:layout_marginBottom="4dp">
 
             <Button
                 android:id="@+id/clearCacheButtonGame"
                 android:layout_width="0dp"
-                android:layout_height="35dp"
-                android:layout_weight="1"
+                android:layout_height="40dp"
+                android:layout_weight="0.9"
                 android:text="CLEAR CACHE"
                 android:textColor="#ffcc80"
-                android:textSize="10sp"
+                android:textSize="9.2sp"
                 android:textStyle="bold"
                 android:background="@drawable/utility_button_background"
                 android:layout_marginEnd="5dp" />
@@ -204,14 +204,26 @@
             <Button
                 android:id="@+id/checkUpdatesButtonGame"
                 android:layout_width="0dp"
-                android:layout_height="35dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:text="CHECK UPDATES"
                 android:textColor="#c8e6c9"
-                android:textSize="10sp"
+                android:textSize="9.1sp"
                 android:textStyle="bold"
                 android:background="@drawable/utility_button_background"
-                android:layout_marginStart="5dp" />
+                android:layout_marginEnd="5dp" />
+
+            <!-- Help Button (Game Selection Screen) -->
+            <Button
+                android:id="@+id/helpButtonGame"
+                android:layout_width="50dp"
+                android:layout_height="40dp"
+                android:text="❓"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/help_button_background"
+                android:gravity="center" />
 
         </LinearLayout>
 
@@ -356,31 +368,29 @@
             android:layout_width="280dp"
             android:layout_height="45dp"
             android:text="UNINSTALL ECHO VR"
-            android:textColor="#ffffffff"
+            android:textColor="#FFFFFF"
             android:textSize="12sp"
             android:textStyle="bold"
             android:background="@drawable/uninstall_button_background"
-            android:theme="@style/ThemeOverlay.AppCompat.Dark"
-            android:backgroundTint="@null"
-            android:backgroundTintMode="clear"            
             android:visibility="gone"
             android:layout_marginBottom="10dp" />
 
         <!-- Utility Buttons for Main Content Screen -->
         <LinearLayout
-            android:layout_width="280dp"
+            android:layout_width="300dp"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
+            android:gravity="center"
             android:layout_marginBottom="4dp">
 
             <Button
                 android:id="@+id/clearCacheButtonMain"
                 android:layout_width="0dp"
-                android:layout_height="35dp"
-                android:layout_weight="1"
+                android:layout_height="40dp"
+                android:layout_weight="0.9"
                 android:text="CLEAR CACHE"
                 android:textColor="#ffcc80"
-                android:textSize="10sp"
+                android:textSize="9.2sp"
                 android:textStyle="bold"
                 android:background="@drawable/utility_button_background"
                 android:layout_marginEnd="5dp" />
@@ -388,14 +398,26 @@
             <Button
                 android:id="@+id/checkUpdatesButtonMain"
                 android:layout_width="0dp"
-                android:layout_height="35dp"
+                android:layout_height="40dp"
                 android:layout_weight="1"
                 android:text="CHECK UPDATES"
                 android:textColor="#c8e6c9"
-                android:textSize="10sp"
+                android:textSize="9.1sp"
                 android:textStyle="bold"
                 android:background="@drawable/utility_button_background"
-                android:layout_marginStart="5dp" />
+                android:layout_marginEnd="5dp" />
+
+            <!-- Help Button (Main Content Screen) -->
+            <Button
+                android:id="@+id/helpButtonMain"
+                android:layout_width="50dp"
+                android:layout_height="45dp"
+                android:text="❓"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:background="@drawable/help_button_background"
+                android:gravity="center" />
 
         </LinearLayout>
 
@@ -411,7 +433,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Total Size: 894MB"
+ android:text="Total Size: 894MB"
             android:textColor="#bbdefb"
             android:textSize="10sp"
             android:layout_marginTop="4dp" />
