@@ -79,18 +79,21 @@ public class MainActivity extends AppCompatActivity {
     private Button uninstallEchoVRButton;
     private Button clearCacheButtonMain;
     private Button checkUpdatesButtonMain;
+    // ADDED: Help button variables
+    private Button helpButtonGame;
+    private Button helpButtonMain;
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
-    private static final String ECHO_VR_LEGACY_URL = "https://evr.echo.taxi/r15_26-06-25.apk";
+    private static final String ECHO_VR_LEGACY_URL = "https://files.echovr.de/r15_26-06-25.apk";
     private static final String DATA_URL = "https://mia.cdn.echo.taxi/_data.zip";
     private static final String ENHANCED_GRAPHICS_URL = "https://mia.cdn.echo.taxi/questEchoTextureMod_Alpha_v0.1_06-10-25.apk";
     private static final String GITHUB_RELEASES_URL = "https://api.github.com/repos/heisthecat31/EchoVR-Installer/releases/latest";
     private static final String DISCORD_INVITE_URL = "https://discord.gg/KQ8qGPKQeF";
 
     private static final String BACKUP_DATA_URL = "https://files.echovr.de/_data.zip";
-    private static final String BACKUP_LEGACY_URL = "https://files.echovr.de/r15_26-06-25.apk";
+    private static final String BACKUP_LEGACY_URL = "https://evr.echo.taxi/r15_26-06-25.apk";
     private static final String BACKUP_ENHANCED_GRAPHICS_URL = "https://files.echovr.de/cat/questEchoTextureMod_Alpha_v0.1_06-10-25.apk";
 
     private static final String TARGET_DIR = "readyatdawn/files";
@@ -199,6 +202,10 @@ public class MainActivity extends AppCompatActivity {
         clearCacheButtonMain = findViewById(R.id.clearCacheButtonMain);
         checkUpdatesButtonMain = findViewById(R.id.checkUpdatesButtonMain);
 
+        // ADDED: Initialize help buttons
+        helpButtonGame = findViewById(R.id.helpButtonGame);
+        helpButtonMain = findViewById(R.id.helpButtonMain);
+
         uninstallEchoVRButton = findViewById(R.id.viewLobbyLinkButton);
         uninstallEchoVRButton.setText("UNINSTALL ECHO VR");
 
@@ -223,6 +230,10 @@ public class MainActivity extends AppCompatActivity {
         clearCacheButtonMain.setOnClickListener(v -> showClearCacheConfirmation());
         checkUpdatesButtonMain.setOnClickListener(v -> checkForUpdates());
 
+        // ADDED: Set click listeners for help buttons
+        helpButtonGame.setOnClickListener(v -> showHelpDialog());
+        helpButtonMain.setOnClickListener(v -> showHelpDialog());
+
         grantPermissionsButton.setVisibility(View.GONE);
         launchEchoVRButton.setVisibility(View.GONE);
         uninstallEchoVRButton.setVisibility(View.GONE);
@@ -231,6 +242,28 @@ public class MainActivity extends AppCompatActivity {
         checkUpdatesButtonGame.setVisibility(View.VISIBLE);
         clearCacheButtonMain.setVisibility(View.VISIBLE);
         checkUpdatesButtonMain.setVisibility(View.VISIBLE);
+    }
+
+    // ADDED: Help dialog method
+    private void showHelpDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Troubleshooting Guide");
+
+        String message = "If you're experiencing issues:\n\n" +
+                "1. If links don't work, restart your device or switch WiFi networks.\n\n" +
+                "2. If game crashes when opening:\n" +
+                "   - Ensure all permissions for Echo VR are granted\n" +
+                "   - Reinstall game data\n" +
+                "   - Restart headset after doing both\n\n" +
+                "3. If it still crashes:\n" +
+                "   - Uninstall Echo VR\n" +
+                "   - Choose 'New player' option when reinstalling\n" +
+                "   - Restart device";
+
+        builder.setMessage(message);
+        builder.setPositiveButton("OK", null);
+        builder.setCancelable(true);
+        builder.show();
     }
 
     private void checkAndRequestStoragePermissions() {
@@ -294,6 +327,9 @@ public class MainActivity extends AppCompatActivity {
         mainHandler.post(() -> {
             gameSelectionLayout.setVisibility(View.VISIBLE);
             mainContentLayout.setVisibility(View.GONE);
+            // ADDED: Show game help button, hide main help button
+            helpButtonGame.setVisibility(View.VISIBLE);
+            helpButtonMain.setVisibility(View.GONE);
         });
     }
 
@@ -301,6 +337,9 @@ public class MainActivity extends AppCompatActivity {
         mainHandler.post(() -> {
             gameSelectionLayout.setVisibility(View.GONE);
             mainContentLayout.setVisibility(View.VISIBLE);
+            // ADDED: Show main help button, hide game help button
+            helpButtonGame.setVisibility(View.GONE);
+            helpButtonMain.setVisibility(View.VISIBLE);
             checkDataStatus();
             checkAndShowPermissionPopupAfterInstall();
         });
@@ -1412,16 +1451,16 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        
+
         boolean isCurrentlyInstalled = isPackageInstalled(ECHO_VR_PACKAGE);
 
         if (!isCurrentlyInstalled) {
             if (echoVrInstalled) {
                 echoVrInstalled = false;
-                
+
                 executorService.execute(() -> {
                     deleteGameDataFiles();
-                    
+
                     mainHandler.post(() -> {
                         showGameSelectionScreen();
 
@@ -1429,7 +1468,7 @@ public class MainActivity extends AppCompatActivity {
                                 .remove(PREF_INSTALLATION_DATE)
                                 .remove(PREF_INSTALLATION_TYPE)
                                 .apply();
-                        
+
                         statusText.setText("Ready for new installation");
                         statusText.setTextColor(Color.parseColor("#4caf50"));
 
