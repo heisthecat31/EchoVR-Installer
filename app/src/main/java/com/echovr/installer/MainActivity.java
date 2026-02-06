@@ -111,13 +111,15 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         reinstallButton = findViewById(R.id.reinstallButton);
         grantPermissionsButton = findViewById(R.id.grantPermissionsButton);
         launchEchoVRButton = findViewById(R.id.launchEchoVRButton);
-        uninstallEchoVRButton = findViewById(R.id.viewLobbyLinkButton); // Reused ID per original xml
+        uninstallEchoVRButton = findViewById(R.id.viewLobbyLinkButton); 
         uninstallEchoVRButton.setText("UNINSTALL ECHO VR");
 
         // Options
         findViewById(R.id.legacyOption).setOnClickListener(v -> manager.installLegacyEchoVr());
-        findViewById(R.id.enhancedGraphicsOption).setOnClickListener(v -> manager.installEnhancedGraphics());
         findViewById(R.id.newPlayerOption).setOnClickListener(v -> showNewPlayerDialog());
+        
+        // --- NEW BUTTON: BETTER GRAPHICS NEW PLAYER ---
+        findViewById(R.id.betterGraphicsOption).setOnClickListener(v -> showBetterGraphicsDialog());
 
         // Actions
         downloadButton.setOnClickListener(v -> manager.installGameData());
@@ -154,6 +156,107 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         helpButtonMain.setOnClickListener(help);
     }
     
+    // --- DIALOGS ---
+
+    private void showBetterGraphicsDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Better Graphics (Patcher)");
+
+        LinearLayout mainLayout = new LinearLayout(this);
+        mainLayout.setOrientation(LinearLayout.VERTICAL);
+        mainLayout.setPadding(50, 40, 50, 30);
+        mainLayout.setBackgroundColor(Color.parseColor("#1a1a1a"));
+
+        TextView instruction = new TextView(this);
+        instruction.setText("Enter New Player APK URL:");
+        instruction.setTextColor(Color.WHITE);
+        instruction.setTextSize(16);
+        instruction.setTypeface(null, Typeface.BOLD);
+        instruction.setGravity(Gravity.CENTER);
+        instruction.setPadding(0, 0, 0, 20);
+        mainLayout.addView(instruction);
+
+        EditText apkUrlInput = new EditText(this);
+        apkUrlInput.setHint("https://example.com/echo_vr.apk");
+        apkUrlInput.setTextColor(Color.WHITE);
+        apkUrlInput.setHintTextColor(Color.parseColor("#888888"));
+        apkUrlInput.setBackground(getResources().getDrawable(R.drawable.edit_text_background));
+        apkUrlInput.setPadding(25, 20, 25, 20);
+        apkUrlInput.setTextSize(14);
+        
+        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        inputParams.setMargins(0, 0, 0, 25);
+        apkUrlInput.setLayoutParams(inputParams);
+        mainLayout.addView(apkUrlInput);
+
+        // Discord link
+        TextView noteText = new TextView(this);
+        String discordText = "Get APK Link From The Discord";
+        SpannableString spannableString = new SpannableString(discordText);
+        ClickableSpan clickableSpan = new ClickableSpan() {
+            @Override
+            public void onClick(@NonNull View widget) {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DISCORD_INVITE_URL)));
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Cannot open link", Toast.LENGTH_SHORT).show();
+                }
+            }
+        };
+        spannableString.setSpan(clickableSpan, 21, 29, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        noteText.setText(spannableString);
+        noteText.setMovementMethod(LinkMovementMethod.getInstance());
+        noteText.setHighlightColor(Color.parseColor("#40ffffff"));
+        noteText.setTextColor(Color.parseColor("#888888"));
+        noteText.setTextSize(12);
+        noteText.setGravity(Gravity.CENTER);
+        noteText.setPadding(0, 0, 0, 20);
+        mainLayout.addView(noteText);
+
+        LinearLayout buttonLayout = new LinearLayout(this);
+        buttonLayout.setOrientation(LinearLayout.HORIZONTAL);
+        buttonLayout.setGravity(Gravity.CENTER);
+
+        Button cancelBtn = new Button(this);
+        cancelBtn.setText("CANCEL");
+        cancelBtn.setTextColor(Color.WHITE);
+        cancelBtn.setBackground(getResources().getDrawable(R.drawable.button_background_secondary));
+        cancelBtn.setPadding(40, 15, 40, 15);
+        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        cancelParams.setMargins(0, 0, 10, 0);
+        cancelBtn.setLayoutParams(cancelParams);
+
+        Button installBtn = new Button(this);
+        installBtn.setText("PATCH & INSTALL");
+        installBtn.setTextColor(Color.WHITE);
+        installBtn.setBackground(getResources().getDrawable(R.drawable.button_background));
+        installBtn.setPadding(40, 15, 40, 15);
+        LinearLayout.LayoutParams installParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        installParams.setMargins(10, 0, 0, 0);
+        installBtn.setLayoutParams(installParams);
+
+        buttonLayout.addView(cancelBtn);
+        buttonLayout.addView(installBtn);
+        mainLayout.addView(buttonLayout);
+
+        builder.setView(mainLayout);
+        AlertDialog dialog = builder.create();
+        dialog.getWindow().setBackgroundDrawableResource(R.drawable.dialog_background);
+
+        cancelBtn.setOnClickListener(v -> dialog.dismiss());
+        installBtn.setOnClickListener(v -> {
+            String inputText = apkUrlInput.getText().toString().trim();
+            String extractedUrl = extractUrl(inputText);
+            if (extractedUrl != null && extractedUrl.startsWith("http")) {
+                dialog.dismiss();
+                manager.installBetterGraphics(extractedUrl);
+            } else {
+                Toast.makeText(this, "No valid URL found", Toast.LENGTH_SHORT).show();
+            }
+        });
+        dialog.show();
+    }
 
     private void checkState() {
         boolean isInstalled = isPackageInstalled(ECHO_VR_PACKAGE);
@@ -506,12 +609,9 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     
     private void uninstallEchoVR() {
         try {
-            // Create the intent with the ACTION_DELETE action
             Intent uninstallIntent = new Intent(Intent.ACTION_DELETE);
-            // Format the URI correctly with the package name
             uninstallIntent.setData(Uri.parse("package:com.readyatdawn.r15"));
             uninstallIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            // Start the system uninstall activity
             startActivity(uninstallIntent);
         } catch (ActivityNotFoundException e) {
             Log.e("Uninstall", "Could not launch uninstall dialog.", e);
