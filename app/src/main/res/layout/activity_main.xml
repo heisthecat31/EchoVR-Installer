@@ -11,7 +11,6 @@
         android:layout_height="match_parent"
         android:background="#80000000" />
 
-    <!-- Game Selection Layout -->
     <LinearLayout
         android:id="@+id/gameSelectionLayout"
         android:layout_width="match_parent"
@@ -136,7 +135,7 @@
         </LinearLayout>
 
         <LinearLayout
-            android:id="@+id/enhancedGraphicsOption"
+            android:id="@+id/betterGraphicsOption"
             android:layout_width="280dp"
             android:layout_height="80dp"
             android:background="@drawable/option_card_background"
@@ -163,7 +162,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Quest 3 Legacy Option"
+                    android:text="Better Graphics For All"
                     android:textColor="#4fc3f7"
                     android:textSize="14sp"
                     android:textStyle="bold" />
@@ -171,7 +170,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Better Graphics For Legacy Quest 3 Players Only"
+                    android:text="Patch APK with enhanced graphics"
                     android:textColor="#bbdefb"
                     android:textSize="10sp"
                     android:layout_marginTop="2dp" />
@@ -180,7 +179,6 @@
 
         </LinearLayout>
 
-        <!-- Utility Buttons for Game Selection Screen -->
         <LinearLayout
             android:layout_width="300dp"
             android:layout_height="wrap_content"
@@ -213,7 +211,6 @@
                 android:background="@drawable/utility_button_background"
                 android:layout_marginEnd="5dp" />
 
-            <!-- Help Button (Game Selection Screen) -->
             <Button
                 android:id="@+id/helpButtonGame"
                 android:layout_width="50dp"
@@ -248,7 +245,6 @@
 
     </LinearLayout>
 
-    <!-- Main Content Layout -->
     <LinearLayout
         android:id="@+id/mainContentLayout"
         android:layout_width="match_parent"
@@ -284,7 +280,6 @@
 
         </LinearLayout>
 
-        <!-- Status Section -->
         <LinearLayout
             android:layout_width="280dp"
             android:layout_height="wrap_content"
@@ -315,7 +310,6 @@
 
         </LinearLayout>
 
-        <!-- Main Action Buttons -->
         <Button
             android:id="@+id/downloadButton"
             android:layout_width="280dp"
@@ -376,7 +370,6 @@
             android:visibility="gone"
             android:layout_marginBottom="10dp" />
 
-        <!-- Utility Buttons for Main Content Screen -->
         <LinearLayout
             android:layout_width="300dp"
             android:layout_height="wrap_content"
@@ -408,7 +401,6 @@
                 android:background="@drawable/utility_button_background"
                 android:layout_marginEnd="5dp" />
 
-            <!-- Help Button (Main Content Screen) -->
             <Button
                 android:id="@+id/helpButtonMain"
                 android:layout_width="50dp"
@@ -434,7 +426,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
- android:text="Total Size: 894MB"
+            android:text="Total Size: 894MB"
             android:textColor="#bbdefb"
             android:textSize="10sp"
             android:layout_marginTop="4dp" />
