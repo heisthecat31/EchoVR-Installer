@@ -128,6 +128,52 @@ public class InstallerManager {
         startApkDownload(url, "Custom APK", false, null, "echo_vr_custom.apk");
     }
 
+    // --- NEW METHOD FOR BETTER GRAPHICS PATCHING ---
+    public void installBetterGraphics(String apkUrl) {
+        if (!hasEnoughSpace()) return;
+        isTaskCancelled = false;
+        mainHandler.post(listener::onTaskStarted);
+
+        currentTask = executorService.submit(() -> {
+            try {
+                // 1. Download Base APK
+                mainHandler.post(() -> listener.onProgress(0, "Downloading base APK..."));
+                // Download to cache first
+                File baseApk = downloadFile(apkUrl, "cache", "base_echo.apk", "Base APK", false);
+                
+                if (baseApk == null || isTaskCancelled) {
+                    throw new Exception("Download failed or cancelled");
+                }
+
+                // 2. Patch, Align, and Sign
+                // We use a callback to pipe the status updates to the UI
+                mainHandler.post(() -> listener.onProgress(-1, "Starting Patch Process..."));
+                
+                File finalApk = ApkPatcher.patchApk(context, baseApk, status -> 
+                    mainHandler.post(() -> listener.onProgress(-1, status))
+                );
+
+                mainHandler.post(() -> {
+                    listener.onTaskFinished();
+                    if (!isTaskCancelled && finalApk.exists()) {
+                        launchApkInstaller(finalApk);
+                        listener.onSuccess("Patching complete! Prompting install...");
+                    } else if (!isTaskCancelled) {
+                        listener.onError("Patching failed to produce output.");
+                    }
+                });
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                mainHandler.post(() -> {
+                    listener.onTaskFinished();
+                    listener.onError("Error: " + e.getMessage());
+                });
+            }
+        });
+    }
+    // -----------------------------------------------
+
     private void downloadAndInstallApkWithBackup(String primaryUrl, String backupUrl, String name, String saveFileName) {
         startApkDownload(primaryUrl, name, true, backupUrl, saveFileName);
     }
@@ -142,7 +188,6 @@ public class InstallerManager {
 
             if (apkFile == null && useBackup && !isTaskCancelled && backupUrl != null) {
                 mainHandler.post(() -> listener.onProgress(0, "First link failed, trying backup..."));
-                // Resume download using backup URL
                 apkFile = downloadFile(backupUrl, "apk", saveFileName, name, true);
             }
 
@@ -167,7 +212,6 @@ public class InstallerManager {
         currentTask = executorService.submit(() -> {
             File zipFile = downloadFile(dataUrl, "downloads", "game_data.zip", "Game Data", false);
 
-            // If primary failed (returned null), try backup. Backup will see existing partial file and resume.
             if (zipFile == null && !isTaskCancelled) {
                 mainHandler.post(() -> listener.onProgress(0, "Primary failed, trying backup..."));
                 zipFile = downloadFile(backupDataUrl, "downloads", "game_data.zip", "Game Data", true);
@@ -181,7 +225,6 @@ public class InstallerManager {
                 return;
             }
 
-            // 2. Extract
             mainHandler.post(() -> listener.onProgress(-1, "Extracting data..."));
             boolean success = extractZipFile(zipFile);
 
@@ -209,7 +252,7 @@ public class InstallerManager {
         OutputStream output = null;
 
         try {
-            File dir = context.getExternalFilesDir(dirType);
+            File dir = dirType.equals("cache") ? context.getExternalCacheDir() : context.getExternalFilesDir(dirType);
             if (dir == null) return null;
             if (!dir.exists()) dir.mkdirs();
 
@@ -250,7 +293,6 @@ public class InstallerManager {
                 if (responseCode != HttpURLConnection.HTTP_OK) return null;
             }
 
-            // If we asked to resume but server sent 200 OK (fresh file), restart counter
             if (!isResuming && downloaded > 0) {
                 file.delete();
                 downloaded = 0;
@@ -289,7 +331,6 @@ public class InstallerManager {
 
         } catch (Exception e) {
             Log.e("InstallerManager", "Download error: " + e.getMessage());
-            // Return null on exception (e.g. wifi cut), which allows the backup logic to pick up
             return null;
         } finally {
             try {
