@@ -1,5 +1,6 @@
 package com.echovr.installer;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -14,11 +15,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.text.SpannableString;
-import android.text.Spanned;
 import android.text.TextUtils;
-import android.text.method.LinkMovementMethod;
-import android.text.style.ClickableSpan;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
@@ -49,7 +46,6 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     private LinearLayout gameSelectionLayout, mainContentLayout;
     private TextView statusText;
     private Button downloadButton, reinstallButton, grantPermissionsButton, launchEchoVRButton, uninstallEchoVRButton;
-    private Button clearCacheButtonGame, checkUpdatesButtonGame, clearCacheButtonMain, checkUpdatesButtonMain;
     private Button helpButtonGame, helpButtonMain;
     private AlertDialog progressDialog;
 
@@ -57,6 +53,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     private static final String PREF_PERMISSION_POPUP_SHOWN = "permission_popup_shown";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
     private static final String DISCORD_INVITE_URL = "https://discord.gg/KQ8qGPKQeF";
+    private static final String CURRENT_VERSION = "3.6";
     private boolean justInstalledEchoVr = false;
 
     // Permissions Launchers
@@ -92,16 +89,13 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            getWindow().setStatusBarColor(Color.TRANSPARENT);
-        }
+        getWindow().setStatusBarColor(Color.TRANSPARENT);
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
-        }
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS);
     }
 
+    @SuppressLint("SetTextI18n")
     private void initializeViews() {
         gameSelectionLayout = findViewById(R.id.gameSelectionLayout);
         mainContentLayout = findViewById(R.id.mainContentLayout);
@@ -137,15 +131,15 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
         // Utility Buttons
         View.OnClickListener clearCache = v -> showConfirmDialog("Clear Cache", "Delete temporary files? This does not affect installed game data.", () -> manager.clearCache());
-        View.OnClickListener checkUpdates = v -> manager.checkForUpdates(getCurrentVersion());
+        View.OnClickListener checkUpdates = v -> manager.checkForUpdates(CURRENT_VERSION);
 
-        clearCacheButtonGame = findViewById(R.id.clearCacheButtonGame);
-        clearCacheButtonMain = findViewById(R.id.clearCacheButtonMain);
+        Button clearCacheButtonGame = findViewById(R.id.clearCacheButtonGame);
+        Button clearCacheButtonMain = findViewById(R.id.clearCacheButtonMain);
         clearCacheButtonGame.setOnClickListener(clearCache);
         clearCacheButtonMain.setOnClickListener(clearCache);
 
-        checkUpdatesButtonGame = findViewById(R.id.checkUpdatesButtonGame);
-        checkUpdatesButtonMain = findViewById(R.id.checkUpdatesButtonMain);
+        Button checkUpdatesButtonGame = findViewById(R.id.checkUpdatesButtonGame);
+        Button checkUpdatesButtonMain = findViewById(R.id.checkUpdatesButtonMain);
         checkUpdatesButtonGame.setOnClickListener(checkUpdates);
         checkUpdatesButtonMain.setOnClickListener(checkUpdates);
 
@@ -158,6 +152,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     
     // --- DIALOGS ---
 
+    @SuppressLint("SetTextI18n")
     private void showBetterGraphicsDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Better Graphics (Patcher)");
@@ -190,29 +185,26 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         apkUrlInput.setLayoutParams(inputParams);
         mainLayout.addView(apkUrlInput);
 
-        // Discord link
-        TextView noteText = new TextView(this);
-        String discordText = "Get APK Link From The Discord";
-        SpannableString spannableString = new SpannableString(discordText);
-        ClickableSpan clickableSpan = new ClickableSpan() {
-            @Override
-            public void onClick(@NonNull View widget) {
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DISCORD_INVITE_URL)));
-                } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "Cannot open link", Toast.LENGTH_SHORT).show();
-                }
+        Button discordButton = new Button(this);
+        discordButton.setText("GET APK FROM DISCORD");
+        discordButton.setTextColor(Color.WHITE);
+        discordButton.setBackground(getResources().getDrawable(R.drawable.button_background));
+        discordButton.setPadding(40, 15, 40, 15);
+        discordButton.setTextSize(14);
+        discordButton.setTypeface(null, Typeface.BOLD);
+        LinearLayout.LayoutParams discordButtonParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        discordButtonParams.setMargins(0, 0, 0, 25);
+        discordButton.setLayoutParams(discordButtonParams);
+        mainLayout.addView(discordButton);
+
+        discordButton.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DISCORD_INVITE_URL)));
+            } catch (Exception e) {
+                Toast.makeText(MainActivity.this, "Cannot open link", Toast.LENGTH_SHORT).show();
             }
-        };
-        spannableString.setSpan(clickableSpan, 21, 29, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        noteText.setText(spannableString);
-        noteText.setMovementMethod(LinkMovementMethod.getInstance());
-        noteText.setHighlightColor(Color.parseColor("#40ffffff"));
-        noteText.setTextColor(Color.parseColor("#888888"));
-        noteText.setTextSize(12);
-        noteText.setGravity(Gravity.CENTER);
-        noteText.setPadding(0, 0, 0, 20);
-        mainLayout.addView(noteText);
+        });
 
         LinearLayout buttonLayout = new LinearLayout(this);
         buttonLayout.setOrientation(LinearLayout.HORIZONTAL);
@@ -477,28 +469,26 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         apkUrlInput.setLayoutParams(inputParams);
         mainLayout.addView(apkUrlInput);
 
-        TextView noteText = new TextView(this);
-        String discordText = "Get APK Link From The Discord";
-        SpannableString spannableString = new SpannableString(discordText);
-        ClickableSpan clickableSpan = new ClickableSpan() {
-            @Override
-            public void onClick(@NonNull View widget) {
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DISCORD_INVITE_URL)));
-                } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "Cannot open link", Toast.LENGTH_SHORT).show();
-                }
+        Button discordButton = new Button(this);
+        discordButton.setText("GET APK FROM DISCORD");
+        discordButton.setTextColor(Color.WHITE);
+        discordButton.setBackground(getResources().getDrawable(R.drawable.button_background));
+        discordButton.setPadding(40, 15, 40, 15);
+        discordButton.setTextSize(14);
+        discordButton.setTypeface(null, Typeface.BOLD);
+        LinearLayout.LayoutParams discordButtonParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        discordButtonParams.setMargins(0, 0, 0, 25);
+        discordButton.setLayoutParams(discordButtonParams);
+        mainLayout.addView(discordButton);
+
+        discordButton.setOnClickListener(v -> {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DISCORD_INVITE_URL)));
+            } catch (Exception e) {
+                Toast.makeText(MainActivity.this, "Cannot open link", Toast.LENGTH_SHORT).show();
             }
-        };
-        spannableString.setSpan(clickableSpan, 21, 29, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        noteText.setText(spannableString);
-        noteText.setMovementMethod(LinkMovementMethod.getInstance());
-        noteText.setHighlightColor(Color.parseColor("#40ffffff"));
-        noteText.setTextColor(Color.parseColor("#888888"));
-        noteText.setTextSize(12);
-        noteText.setGravity(Gravity.CENTER);
-        noteText.setPadding(0, 0, 0, 20);
-        mainLayout.addView(noteText);
+        });
 
         LinearLayout buttonLayout = new LinearLayout(this);
         buttonLayout.setOrientation(LinearLayout.HORIZONTAL);
@@ -640,9 +630,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     }
 
     private String getCurrentVersion() {
-        try {
-            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-        } catch (Exception e) { return "1.0"; }
+        return CURRENT_VERSION;
     }
 
     @Override
