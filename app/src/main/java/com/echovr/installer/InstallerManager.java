@@ -454,7 +454,7 @@ public class InstallerManager {
                 reader.close();
 
                 JSONObject json = new JSONObject(response.toString());
-                String remoteVer = json.getString("tag_name");
+                String remoteVerName = json.getString("name");
                 String notes = json.optString("body", "");
 
                 String downloadUrl = "";
@@ -470,8 +470,8 @@ public class InstallerManager {
                 String finalUrl = downloadUrl;
                 mainHandler.post(() -> {
                     listener.onTaskFinished();
-                    if (isNewVersion(currentVersion, remoteVer)) {
-                        listener.onUpdateAvailable(remoteVer, notes, finalUrl);
+                    if (isNewVersion(currentVersion, remoteVerName)) {
+                        listener.onUpdateAvailable(remoteVerName, notes, finalUrl);
                     } else {
                         listener.onUpdateNotAvailable();
                     }
@@ -501,9 +501,32 @@ public class InstallerManager {
     }
 
     private boolean isNewVersion(String current, String remote) {
-        current = current.replaceAll("[^0-9.]", "");
-        remote = remote.replaceAll("[^0-9.]", "");
-        return !current.equals(remote);
+        String currentVersion = current.replaceAll("[^0-9.]", "");
+        String remoteVersion = remote.replaceAll("[^0-9.]", "");
+
+        Log.d("InstallerManager", "Current Version: " + currentVersion);
+        Log.d("InstallerManager", "Remote Version: " + remoteVersion);
+
+        if (currentVersion.isEmpty() || remoteVersion.isEmpty()) {
+            return false;
+        }
+
+        String[] currentParts = currentVersion.split("\\.");
+        String[] remoteParts = remoteVersion.split("\\.");
+
+        int length = Math.max(currentParts.length, remoteParts.length);
+        for (int i = 0; i < length; i++) {
+            int currentPart = i < currentParts.length ? Integer.parseInt(currentParts[i]) : 0;
+            int remotePart = i < remoteParts.length ? Integer.parseInt(remoteParts[i]) : 0;
+
+            if (remotePart > currentPart) {
+                return true;
+            }
+            if (remotePart < currentPart) {
+                return false;
+            }
+        }
+        return false;
     }
 
     private boolean hasEnoughSpace() {
