@@ -243,6 +243,14 @@
             android:textStyle="bold"
             android:layout_marginTop="12dp" />
 
+        <TextView
+            android:id="@+id/versionTextGame"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#bbdefb"
+            android:textSize="10sp"
+            android:layout_marginTop="4dp" />
+
     </LinearLayout>
 
     <LinearLayout
@@ -422,6 +430,14 @@
             android:textSize="11sp"
             android:textStyle="bold"
             android:layout_marginTop="12dp" />
+
+        <TextView
+            android:id="@+id/versionTextMain"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#bbdefb"
+            android:textSize="10sp"
+            android:layout_marginTop="4dp" />
 
         <TextView
             android:layout_width="wrap_content"
