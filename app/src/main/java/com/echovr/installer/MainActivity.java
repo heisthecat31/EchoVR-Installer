@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         uninstallEchoVRButton.setText("UNINSTALL ECHO VR");
 
         // Options
-        findViewById(R.id.legacyOption).setOnClickListener(v -> manager.installLegacyEchoVr());
+        findViewById(R.id.legacyOption).setOnClickListener(v -> showLegacyWarningDialog());
         findViewById(R.id.newPlayerOption).setOnClickListener(v -> showNewPlayerDialog());
         
         // --- NEW BUTTON: BETTER GRAPHICS NEW PLAYER ---
@@ -283,7 +283,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
                 uninstallEchoVRButton.setVisibility(View.GONE);
             }
 
-            if (justInstalledEchoVr && !prefs.getBoolean(PREF_PERMISSION_POPUP_SHOWN, false)) {
+            if (!prefs.getBoolean(PREF_PERMISSION_POPUP_SHOWN, false)) {
                 showPermissionGuidance();
             }
             justInstalledEchoVr = false;
@@ -566,15 +566,24 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     }
 
     private void showPermissionGuidance() {
+        openAppPermissions();
+        Toast.makeText(this, "Please Grant All Permissions For EchoVR", Toast.LENGTH_LONG).show();
         new AlertDialog.Builder(this)
-                .setTitle("Grant Echo VR Permissions")
-                .setMessage("For Echo VR to work properly, please grant it file permissions:\n\n" +
-                        "Go to: Settings → Privacy → Installed Apps → Echo VR → Permissions → Allow all permissions")
-                .setPositiveButton("Open Settings", (d, w) -> openAppPermissions())
-                .setNegativeButton("Later", null)
+                .setTitle("Permissions Required")
+                .setMessage("Please Grant All Permissions For EchoVR")
+                .setPositiveButton("OK", null)
                 .setCancelable(false)
                 .show();
         prefs.edit().putBoolean(PREF_PERMISSION_POPUP_SHOWN, true).apply();
+    }
+
+    private void showLegacyWarningDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("Warning")
+                .setMessage("Warning, this option is only for people who owned echo vr before shutdown and may not work all the time, it is recommended to use new player option when installing")
+                .setPositiveButton("Continue", (d, w) -> manager.installLegacyEchoVr())
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void openAppPermissions() {

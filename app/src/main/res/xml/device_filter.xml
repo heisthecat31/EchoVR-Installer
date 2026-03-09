@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Oculus/Meta Quest devices -->
+    <usb-device vendor-id="1252" product-id="-1" /> <!-- Oculus -->
+    <usb-device vendor-id="32902" product-id="-1" /> <!-- Meta -->
+    <usb-device vendor-id="1118" product-id="-1" /> <!-- Oculus (alternative) -->
+    
+    <!-- Generic USB devices for broader detection -->
+    <usb-device vendor-id="-1" product-id="-1" />
+</resources>

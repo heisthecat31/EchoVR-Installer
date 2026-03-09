@@ -33,8 +33,8 @@ public class ApkPatcher {
     // --- CONFIGURE YOUR KEY HERE ---
     private static final String KEYSTORE_NAME = "key.p12"; // Must be in assets folder
     private static final String KEY_ALIAS = "myalias";
-    private static final String KEY_PASS = "changeme";
-    private static final String STORE_PASS = "changeme";
+    private static final String KEY_PASS = "thepassword";
+    private static final String STORE_PASS = "thepassword";
     // -------------------------------
 
     private static final String PATCH_LIB_URL = "https://github.com/heisthecat31/EchoVR-Installer/releases/download/Installer/libr15.so";
