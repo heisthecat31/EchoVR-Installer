@@ -10,6 +10,6 @@ After installing make sure echo vr has permissions granted and then download the
 This Project Was Created In Android Studio and Is Fully Open Source
 https://youtu.be/OcGUNRR0lZA?si=oRKY9--iwNelzrhV
 
-![Screenshot_20260309_172916_Echo_VR_Installer](https://github.com/user-attachments/assets/c05c375e-130a-4cf7-ad0e-52c4a22a2a74)
+<img width="270" height="585" alt="1000054156" src="https://github.com/user-attachments/assets/c05c375e-130a-4cf7-ad0e-52c4a22a2a74" />
 
 <img width="270" height="585" alt="1000054156" src="https://github.com/user-attachments/assets/6de8c929-313e-46b1-9b30-73951dcc92d0" />
