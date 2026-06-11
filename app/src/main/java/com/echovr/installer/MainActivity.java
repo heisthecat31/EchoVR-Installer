@@ -186,7 +186,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         mainLayout.addView(apkUrlInput);
 
         Button discordButton = new Button(this);
-        discordButton.setText("GET APK FROM DISCORD");
+        discordButton.setText("GET APK FROM DISCORD (Press Me)");
         discordButton.setTextColor(Color.WHITE);
         discordButton.setBackground(getResources().getDrawable(R.drawable.button_background));
         discordButton.setPadding(40, 15, 40, 15);
@@ -470,7 +470,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         mainLayout.addView(apkUrlInput);
 
         Button discordButton = new Button(this);
-        discordButton.setText("GET APK FROM DISCORD");
+        discordButton.setText("GET APK FROM DISCORD (Press Me)");
         discordButton.setTextColor(Color.WHITE);
         discordButton.setBackground(getResources().getDrawable(R.drawable.button_background));
         discordButton.setPadding(40, 15, 40, 15);
