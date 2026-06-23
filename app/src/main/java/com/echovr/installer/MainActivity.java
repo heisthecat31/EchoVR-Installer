@@ -53,7 +53,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     private static final String PREF_PERMISSION_POPUP_SHOWN = "permission_popup_shown";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
     private static final String DISCORD_INVITE_URL = "https://discord.gg/KQ8qGPKQeF";
-    private static final String CURRENT_VERSION = "3.6";
+    private static final String CURRENT_VERSION = "3.8";
     private boolean justInstalledEchoVr = false;
 
     // Permissions Launchers
@@ -269,9 +269,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
                 downloadButton.setVisibility(View.GONE);
                 reinstallButton.setVisibility(View.VISIBLE);
                 grantPermissionsButton.setVisibility(View.VISIBLE);
-
-                boolean hasPerms = hasFilePermissions();
-                launchEchoVRButton.setVisibility(hasPerms ? View.VISIBLE : View.GONE);
+                launchEchoVRButton.setVisibility(View.VISIBLE);
                 uninstallEchoVRButton.setVisibility(View.VISIBLE);
             } else {
                 statusText.setText("Game data missing");
@@ -567,10 +565,10 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
     private void showPermissionGuidance() {
         openAppPermissions();
-        Toast.makeText(this, "Please Grant All Permissions For EchoVR", Toast.LENGTH_LONG).show();
+        Toast.makeText(this, "Please Grant Microphone Permission For Voice Chat", Toast.LENGTH_LONG).show();
         new AlertDialog.Builder(this)
-                .setTitle("Permissions Required")
-                .setMessage("Please Grant All Permissions For EchoVR")
+                .setTitle("Permissions Recommended")
+                .setMessage("To use voice chat in Echo VR, please grant the Microphone permission.")
                 .setPositiveButton("OK", null)
                 .setCancelable(false)
                 .show();

@@ -66,7 +66,7 @@ public class InstallerManager {
     public String backupEnhancedGraphicsUrl = "https://files.echovr.de/cat/questEchoTextureMod_Alpha_v0.1_06-10-25.apk";
 
     private static final String GITHUB_RELEASES_URL = "https://api.github.com/repos/heisthecat31/EchoVR-Installer/releases/latest";
-    private static final String TARGET_DIR = "readyatdawn/files";
+    private static final String TARGET_DIR = "Android/media/com.readyatdawn.r15/files";
     private static final String DATA_FOLDER = "_data";
     private static final String PREFS_NAME = "EchoVRInstallerPrefs";
     private static final String PREF_INSTALLATION_DATE = "installation_date";
@@ -97,22 +97,66 @@ public class InstallerManager {
                 connection.setConnectTimeout(5000);
                 connection.setReadTimeout(5000);
                 connection.setInstanceFollowRedirects(true);
-                if (connection.getResponseCode() == HttpURLConnection.HTTP_OK ||
-                        connection.getResponseCode() == HttpURLConnection.HTTP_MOVED_TEMP) {
+                
+                String etag = prefs.getString("config_etag", null);
+                String lastModified = prefs.getString("config_last_modified", null);
+                
+                if (etag != null) {
+                    connection.setRequestProperty("If-None-Match", etag);
+                }
+                if (lastModified != null) {
+                    connection.setRequestProperty("If-Modified-Since", lastModified);
+                }
+
+                int responseCode = connection.getResponseCode();
+                String jsonResponse;
+
+                if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
+                    jsonResponse = prefs.getString("config_json_data", "{}");
+                    Log.d("InstallerManager", "Using cached config.json");
+                } else if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
                     BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
                     StringBuilder response = new StringBuilder();
                     String line;
                     while ((line = reader.readLine()) != null) response.append(line);
                     reader.close();
-                    JSONObject config = new JSONObject(response.toString());
-                    if (config.has("legacyUrl")) echoVrLegacyUrl = config.getString("legacyUrl");
-                    if (config.has("dataUrl")) dataUrl = config.getString("dataUrl");
-                    if (config.has("enhancedUrl")) enhancedGraphicsUrl = config.getString("enhancedUrl");
-                    if (config.has("backupLegacyUrl")) backupLegacyUrl = config.getString("backupLegacyUrl");
-                    if (config.has("backupDataUrl")) backupDataUrl = config.getString("backupDataUrl");
-                    if (config.has("backupEnhancedUrl")) backupEnhancedGraphicsUrl = config.getString("backupEnhancedUrl");
+                    jsonResponse = response.toString();
+                    Log.d("InstallerManager", "Downloaded fresh config.json");
+
+                    String newEtag = connection.getHeaderField("ETag");
+                    String newLastModified = connection.getHeaderField("Last-Modified");
+                    
+                    SharedPreferences.Editor editor = prefs.edit();
+                    editor.putString("config_json_data", jsonResponse);
+                    if (newEtag != null) editor.putString("config_etag", newEtag);
+                    if (newLastModified != null) editor.putString("config_last_modified", newLastModified);
+                    editor.apply();
+                } else {
+                    jsonResponse = prefs.getString("config_json_data", "{}");
                 }
-            } catch (Exception ignored) { }
+
+                JSONObject config = new JSONObject(jsonResponse);
+                if (config.has("legacyUrl")) echoVrLegacyUrl = config.getString("legacyUrl");
+                if (config.has("dataUrl")) dataUrl = config.getString("dataUrl");
+                if (config.has("enhancedUrl")) enhancedGraphicsUrl = config.getString("enhancedUrl");
+                if (config.has("backupLegacyUrl")) backupLegacyUrl = config.getString("backupLegacyUrl");
+                if (config.has("backupDataUrl")) backupDataUrl = config.getString("backupDataUrl");
+                if (config.has("backupEnhancedUrl")) backupEnhancedGraphicsUrl = config.getString("backupEnhancedUrl");
+
+            } catch (Exception ignored) { 
+                try {
+                    String cached = prefs.getString("config_json_data", null);
+                    if (cached != null) {
+                        JSONObject config = new JSONObject(cached);
+                        if (config.has("legacyUrl")) echoVrLegacyUrl = config.getString("legacyUrl");
+                        if (config.has("dataUrl")) dataUrl = config.getString("dataUrl");
+                        if (config.has("enhancedUrl")) enhancedGraphicsUrl = config.getString("enhancedUrl");
+                        if (config.has("backupLegacyUrl")) backupLegacyUrl = config.getString("backupLegacyUrl");
+                        if (config.has("backupDataUrl")) backupDataUrl = config.getString("backupDataUrl");
+                        if (config.has("backupEnhancedUrl")) backupEnhancedGraphicsUrl = config.getString("backupEnhancedUrl");
+                    }
+                } catch (Exception e) {}
+            }
         });
     }
 
@@ -149,7 +193,7 @@ public class InstallerManager {
                 // We use a callback to pipe the status updates to the UI
                 mainHandler.post(() -> listener.onProgress(-1, "Starting Patch Process..."));
                 
-                File finalApk = ApkPatcher.patchApk(context, baseApk, status -> 
+                File finalApk = ApkPatcher.patchApk(context, baseApk, true, status -> 
                     mainHandler.post(() -> listener.onProgress(-1, status))
                 );
 
@@ -191,16 +235,33 @@ public class InstallerManager {
                 apkFile = downloadFile(backupUrl, "apk", saveFileName, name, true);
             }
 
-            File finalApk = apkFile;
-            mainHandler.post(() -> {
-                listener.onTaskFinished();
-                if (isTaskCancelled) return;
-                if (finalApk != null) {
-                    launchApkInstaller(finalApk);
-                } else {
-                    listener.onError(name + " download failed from all sources.");
+            if (apkFile != null && !isTaskCancelled) {
+                try {
+                    mainHandler.post(() -> listener.onProgress(-1, "Applying Paths Patch..."));
+                    File patchedApk = ApkPatcher.patchApk(context, apkFile, false, status -> 
+                        mainHandler.post(() -> listener.onProgress(-1, status))
+                    );
+                    mainHandler.post(() -> {
+                        listener.onTaskFinished();
+                        if (!isTaskCancelled && patchedApk.exists()) {
+                            launchApkInstaller(patchedApk);
+                        } else if (!isTaskCancelled) {
+                            listener.onError("Patching failed to produce output.");
+                        }
+                    });
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    mainHandler.post(() -> {
+                        listener.onTaskFinished();
+                        if (!isTaskCancelled) listener.onError("Patching Error: " + e.getMessage());
+                    });
                 }
-            });
+            } else {
+                mainHandler.post(() -> {
+                    listener.onTaskFinished();
+                    if (!isTaskCancelled) listener.onError(name + " download failed from all sources.");
+                });
+            }
         });
     }
 
@@ -422,7 +483,7 @@ public class InstallerManager {
 
     public void deleteGameDataFiles() {
         executorService.execute(() -> {
-            File radDir = new File(Environment.getExternalStorageDirectory(), "readyatdawn");
+            File radDir = new File(Environment.getExternalStorageDirectory(), "Android/media/com.readyatdawn.r15");
             if (radDir.exists()) deleteDirectory(radDir);
             prefs.edit().remove(PREF_INSTALLATION_DATE).apply();
         });

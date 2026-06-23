@@ -47,26 +47,37 @@ public class ApkPatcher {
         void onProgress(String status);
     }
 
-    public static File patchApk(Context context, File inputApk, PatcherListener listener) throws Exception {
+    public static File patchApk(Context context, File inputApk, boolean applyBetterGraphics, PatcherListener listener) throws Exception {
         File cacheDir = context.getExternalCacheDir();
         File libFile = new File(cacheDir, "libr15.so");
         File configFile = new File(cacheDir, "gamesettings_config.json");
         File tempUnsigned = new File(cacheDir, "temp_modded.apk");
         File tempAligned = new File(cacheDir, "temp_aligned.apk");
         
-        File finalApk = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "EchoVR_BetterGraphics.apk");
+        String outName = applyBetterGraphics ? "EchoVR_BetterGraphics.apk" : "EchoVR_Patched.apk";
+        File finalApk = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), outName);
 
         try {
-            // 1. Download Patches
-            listener.onProgress("Downloading patch files...");
-            downloadFile(PATCH_LIB_URL, libFile);
-            downloadFile(PATCH_CONFIG_URL, configFile);
+            if (applyBetterGraphics) {
+                // 1. Download Patches
+                listener.onProgress("Downloading Better Graphics files...");
+                downloadFile(PATCH_LIB_URL, libFile);
+                downloadFile(PATCH_CONFIG_URL, configFile);
+            } else {
+                // 1. Extract existing libr15.so from the APK
+                listener.onProgress("Extracting engine library...");
+                extractFileFromZip(inputApk, TARGET_LIB_PATH, libFile);
+            }
 
-            // 2. Replace Files in APK
-            listener.onProgress("Patching APK...");
-            replaceFilesInZip(inputApk, tempUnsigned, libFile, configFile);
+            // 2. Binary Patch libr15.so to fix the Android/data path
+            listener.onProgress("Patching data paths...");
+            patchLibr15Paths(libFile);
 
-            // 3. Zipalign
+            // 3. Replace Files in APK
+            listener.onProgress("Repacking APK...");
+            replaceFilesInZip(inputApk, tempUnsigned, libFile, applyBetterGraphics ? configFile : null);
+
+            // 4. Zipalign
             listener.onProgress("Aligning APK...");
             if (tempAligned.exists()) tempAligned.delete();
             try (RandomAccessFile raf = new RandomAccessFile(tempUnsigned, "r");
@@ -74,7 +85,7 @@ public class ApkPatcher {
                 ZipAlign.alignZip(raf, fos);
             }
 
-            // 4. Sign
+            // 5. Sign
             listener.onProgress("Signing APK...");
             signApk(context, tempAligned, finalApk);
 
@@ -87,6 +98,89 @@ public class ApkPatcher {
             if (configFile.exists()) configFile.delete();
             if (tempUnsigned.exists()) tempUnsigned.delete();
             if (tempAligned.exists()) tempAligned.delete();
+        }
+    }
+
+    private static void patchLibr15Paths(File libFile) throws IOException {
+        byte[] data = new byte[(int) libFile.length()];
+        try (FileInputStream fis = new FileInputStream(libFile)) {
+            fis.read(data);
+        }
+
+        byte[][] oldStrings = {
+                "/sdcard/readyatdawn/files/_data/5932408047/rad15/android/manifests".getBytes(),
+                "/sdcard/readyatdawn/files/_data/5932408047/rad15/android/packages".getBytes(),
+                "/sdcard/readyatdawn/files".getBytes(),
+                "android.permission.RECORD_AUDIO".getBytes(),
+                "android.permission.READ_EXTERNAL_STORAGE".getBytes(),
+                "android.permission.WRITE_EXTERNAL_STORAGE".getBytes()
+        };
+        byte[][] newStrings = {
+                "/sdcard/Android/media/com.readyatdawn.r15/files/_data/5932408047/rad15/android/manifests".getBytes(),
+                "/sdcard/Android/media/com.readyatdawn.r15/files/_data/5932408047/rad15/android/packages".getBytes(),
+                "/sdcard/Android/media/com.readyatdawn.r15/files".getBytes(),
+                "android.permission.INTERNET".getBytes(),
+                "android.permission.INTERNET".getBytes(),
+                "android.permission.INTERNET".getBytes()
+        };
+
+        for (int s = 0; s < oldStrings.length; s++) {
+            byte[] oldStr = oldStrings[s];
+            byte[] newStr = newStrings[s];
+
+            int idx = indexOf(data, oldStr, 0);
+            while (idx != -1) {
+                int nullsFound = 0;
+                for (int i = idx + oldStr.length; i < data.length; i++) {
+                    if (data[i] == 0) nullsFound++;
+                    else break;
+                }
+                
+                int paddingNeeded = newStr.length - oldStr.length;
+                if (nullsFound >= paddingNeeded) {
+                    int totalSpace = oldStr.length + nullsFound;
+                    for (int i = 0; i < totalSpace; i++) {
+                        if (i < newStr.length) {
+                            data[idx + i] = newStr[i];
+                        } else {
+                            data[idx + i] = 0;
+                        }
+                    }
+                }
+                idx = indexOf(data, oldStr, idx + newStr.length);
+            }
+        }
+
+        try (FileOutputStream fos = new FileOutputStream(libFile)) {
+            fos.write(data);
+        }
+    }
+
+    private static int indexOf(byte[] data, byte[] pattern, int start) {
+        for (int i = start; i <= data.length - pattern.length; i++) {
+            boolean match = true;
+            for (int j = 0; j < pattern.length; j++) {
+                if (data[i + j] != pattern[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return i;
+        }
+        return -1;
+    }
+
+    private static void extractFileFromZip(File zipFile, String targetPath, File destFile) throws IOException {
+        try (ZipFile zip = new ZipFile(zipFile)) {
+            ZipEntry entry = zip.getEntry(targetPath);
+            if (entry != null) {
+                try (InputStream is = zip.getInputStream(entry);
+                     FileOutputStream fos = new FileOutputStream(destFile)) {
+                    copyStream(is, fos);
+                }
+            } else {
+                throw new IOException("File not found in APK: " + targetPath);
+            }
         }
     }
 
@@ -103,7 +197,7 @@ public class ApkPatcher {
                     writeEntry(zos, name, newLib);
                     continue;
                 }
-                if (name.equals(TARGET_CONFIG_PATH)) {
+                if (newConfig != null && name.equals(TARGET_CONFIG_PATH)) {
                     writeEntry(zos, name, newConfig);
                     continue;
                 }
@@ -127,7 +221,6 @@ public class ApkPatcher {
     }
 
     private static void signApk(Context context, File input, File output) throws Exception {
-        // Change "JKS" to "PKCS12"
         KeyStore ks = KeyStore.getInstance("PKCS12"); 
         
         try (InputStream is = context.getAssets().open(KEYSTORE_NAME)) {
