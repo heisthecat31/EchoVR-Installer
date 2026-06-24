@@ -8,7 +8,7 @@ After installing make sure echo vr has permissions granted and then download the
 
 
 This Project Was Created In Android Studio and Is Fully Open Source
-https://youtu.be/OcGUNRR0lZA?si=oRKY9--iwNelzrhV
+https://youtu.be/GQW5AAhJFDo
 
 <img width="270" height="585" alt="1000054156" src="https://github.com/user-attachments/assets/c05c375e-130a-4cf7-ad0e-52c4a22a2a74" />
 
