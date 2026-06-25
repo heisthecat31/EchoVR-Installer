@@ -30,12 +30,10 @@ import java.util.zip.ZipOutputStream;
 
 public class ApkPatcher {
 
-    // --- CONFIGURE YOUR KEY HERE ---
-    private static final String KEYSTORE_NAME = "key.p12"; // Must be in assets folder
-    private static final String KEY_ALIAS = "myalias";
-    private static final String KEY_PASS = "thepassword";
-    private static final String STORE_PASS = "thepassword";
-    // -------------------------------
+    // --- HARDCODED KEY FOR RELIABLE SIGNING ---
+    private static final String PRIVATE_KEY_BASE64 = "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCYYWC2NgyWazIWzNsZ2AhC4vfhWpdZAWeaPWp+lxftXHEz6Y6dqOJi5my4COXTxzzPqZ1YlLszx1yd3e08OQ/pErKJOcwJR/jBGbNVl/1mHZt29qV7xQy+dzpRZPBXjIP7GYvPMUD3TsKa8QSn3qEr1WDXLl8ykkYEwL8d8/h8tYUqj/x7d1/ipCj9xWGlPm9GmWnqFmEbF+MWxwM2+fqIGftsh8qGlPaZbBjowKj4z1YgYosgfwB/S1MUGHym78L/OMcqKzodshwODfJtAcLfgU4UU5i2UlZumH67/DFA3ez1p2aHZw8+f83x5YK8viRCJF9kagkfmAvlJYznDdqbAgMBAAECggEAKmsFFIP0OhUqEt3A6i9QkWoELdfdhLnW4MFS+V1PHFSc8KIGAM5oArb5MbvMWok+XOJu+h8hA5duKUYDib2qt6tsRrXvne/Kh9qDKQMP15LLWbDsPQmL9CNVeR37p6tmfApO+ITR/GYQ1zfbn21ieUTDWfM/LeE5G46aRRjKpdAmBPXnGgeJefZ9KCOEG/AhWrdP7BUR8DAF9v6wTeW0hat7wm1b++eUvELZ6Bgqx12n2W8sAFfFRoD4awAqYLG0YI9BMmlgGIIGfHtN6JbTnxUVohJEtvL/QFyrQGZ0HHVWAddqk1sXztdVTERz9v05mf6cQ82XVLkN7skW3G7pfQKBgQDFyiU5fa20OtTcyihQCMF1Tv8G/pH/Z45eu/uMcIh4XDXrPGplTB5EQSe90KxoDBW1vBiu8uj7dVGddvFQpIxGwDv7iV0kA62iv8/5Lmuby6t5rMaZ3+bOuULlE0Accg1VbGxuQhCHzr81KRRhlJMlGoIJC0DIq7HLLMd50tjFRwKBgQDFOgLvZAwCM0c5TiHhxoagaiPhgfj5/cTizKiTQn1Yj2T+bmOQzy2V/psWdJKWy6UH7bNQfg0MPaHajCwyfLxkwlX7Uml7ISa4UWjJuasbaSue6StcbjvKAaEvI2OULJR8Enmq7zuc1HCW01Sm4u3wwvLfYgK1vPQkiAaLn7h6DQKBgBH7LKMrX81Qw+VGo5+TDDNj+R9jqVY0zeai5F2CJYX7rBM0rN+EqgO+gKRrAiF7Z8Xb0cql3rRtl/vewlV4gCA2fb2CYWtSwkhXc8rNg47oVzB6mpuGlW8ZvJEizONJIxkvADSN4P7Xtt5YW7f7T91Bqay0zzDvGvzDl2bl2jslAoGAVl9ie65n5+rHDVyfT/4eZVA2aIMAI5M0T1LrnJooxMj/pMF5Tyi8QQ0gpEPnEq0amA9MUTryweKX6Fss2+tuof3No+Pil+7bwyq75mQugDGdzdk1iSQpgP0XtsobyP+BA5kfuXFNvQ/4QsVINFH7fE4UCSomH6shjIIZw7nuE10CgYEAleid+LsRs4YhG9uBa5rVn6DJIqdyyFqx24OjlcNFGfvgakjUWEljlIxpKF4MdE6DdzHYTaBZ3W9nOmj/32h5NEMPgovX8GcLIpbdalMuSihFpVdlDfFL9WsMuIL/7UtB9OdIll/JEgbmZ+iOehIiustkTgLyJP9stRIstpbM6v8=";
+    private static final String CERT_BASE64 = "MIIDeDCCAmCgAwIBAgIJAJA5+HY+OtK3MA0GCSqGSIb3DQEBCwUAMGkxEDAOBgNVBAYTB1Vua25vd24xEDAOBgNVBAgTB1Vua25vd24xEDAOBgNVBAcTB1Vua25vd24xEDAOBgNVBAoTB1Vua25vd24xEDAOBgNVBAsTB1Vua25vd24xDTALBgNVBAMTBGVjaG8wIBcNMjYwMjA3MDcwMzQwWhgPMjA1MzA2MjUwNzAzNDBaMGkxEDAOBgNVBAYTB1Vua25vd24xEDAOBgNVBAgTB1Vua25vd24xEDAOBgNVBAcTB1Vua25vd24xEDAOBgNVBAoTB1Vua25vd24xEDAOBgNVBAsTB1Vua25vd24xDTALBgNVBAMTBGVjaG8wggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCYYWC2NgyWazIWzNsZ2AhC4vfhWpdZAWeaPWp+lxftXHEz6Y6dqOJi5my4COXTxzzPqZ1YlLszx1yd3e08OQ/pErKJOcwJR/jBGbNVl/1mHZt29qV7xQy+dzpRZPBXjIP7GYvPMUD3TsKa8QSn3qEr1WDXLl8ykkYEwL8d8/h8tYUqj/x7d1/ipCj9xWGlPm9GmWnqFmEbF+MWxwM2+fqIGftsh8qGlPaZbBjowKj4z1YgYosgfwB/S1MUGHym78L/OMcqKzodshwODfJtAcLfgU4UU5i2UlZumH67/DFA3ez1p2aHZw8+f83x5YK8viRCJF9kagkfmAvlJYznDdqbAgMBAAGjITAfMB0GA1UdDgQWBBR/2Gfa2sZO4vVBkWGIvUNjeZQe7jANBgkqhkiG9w0BAQsFAAOCAQEAb1/yW3REt4b1qt8JdgWa1QKcjE0eh9A4VgogJv3AbKv1m/ssh9WgWS8QHVTeEZV/O+zi+Wyh040MoyRgmIjQWMZMIaqPqztqYqbwS6YxHj8ccys+XbVmpFPpAuR+mrvXLWB3wMRV61yWJMlqiAjeT0n/oKtWila/LsvJr2oP3tToyleVNmARFNFsuId/qz8lC7IeC71p+DTYX+VNWvKDONCNEZ3eu1Ky0Sq3KjJIJwxN6j6sVmmGmbBwhJgs4sLyX2C1dnAT5fKwDKRl+/a+jzjV8ZyTAzyKXecyIq1ZUFfoECrlBnXYoQd2jR2kKiiSgCCraYwU3XnMXbO+XzPsug==";
+    // ----------------------------------------------
 
     private static final String PATCH_LIB_URL = "https://github.com/heisthecat31/EchoVR-Installer/releases/download/Installer/libr15.so";
     private static final String PATCH_CONFIG_URL = "https://github.com/heisthecat31/EchoVR-Installer/releases/download/Installer/gamesettings_config.json";
@@ -221,14 +219,13 @@ public class ApkPatcher {
     }
 
     private static void signApk(Context context, File input, File output) throws Exception {
-        KeyStore ks = KeyStore.getInstance("PKCS12"); 
-        
-        try (InputStream is = context.getAssets().open(KEYSTORE_NAME)) {
-            ks.load(is, STORE_PASS.toCharArray());
-        }
+        byte[] keyBytes = android.util.Base64.decode(PRIVATE_KEY_BASE64, android.util.Base64.DEFAULT);
+        java.security.KeyFactory kf = java.security.KeyFactory.getInstance("RSA");
+        PrivateKey key = kf.generatePrivate(new java.security.spec.PKCS8EncodedKeySpec(keyBytes));
 
-        PrivateKey key = (PrivateKey) ks.getKey(KEY_ALIAS, KEY_PASS.toCharArray());
-        X509Certificate cert = (X509Certificate) ks.getCertificate(KEY_ALIAS);
+        byte[] certBytes = android.util.Base64.decode(CERT_BASE64, android.util.Base64.DEFAULT);
+        java.security.cert.CertificateFactory cf = java.security.cert.CertificateFactory.getInstance("X.509");
+        X509Certificate cert = (X509Certificate) cf.generateCertificate(new java.io.ByteArrayInputStream(certBytes));
 
         ApkSigner.SignerConfig config = new ApkSigner.SignerConfig.Builder("EchoPatcher", key, Collections.singletonList(cert)).build();
 
