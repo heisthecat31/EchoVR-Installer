@@ -66,13 +66,21 @@ public class ManifestParser {
 
     private static void parseEntry(String line, UpdateManifest manifest) {
         String[] parts = line.split("\\s+");
-        if (parts.length >= 3) {
-            String op = parts[0];
-            String path = parts[1];
-            String sha256 = parts[2];
-            if ("add".equalsIgnoreCase(op) || "del".equalsIgnoreCase(op)) {
-                manifest.entries.add(new UpdateManifest.UpdateEntry(op, path, sha256));
+        if (parts.length < 2) {
+            return;
+        }
+        String op = parts[0];
+        String path = parts[1];
+
+        if ("add".equalsIgnoreCase(op)) {
+            // add always needs a hash to verify against - drop malformed lines.
+            if (parts.length >= 3) {
+                manifest.entries.add(new UpdateManifest.UpdateEntry(op, path, parts[2]));
             }
+        } else if ("del".equalsIgnoreCase(op)) {
+            // del path <hash> is optional - UpdateManager doesn't check it before deleting.
+            String sha256 = parts.length >= 3 ? parts[2] : null;
+            manifest.entries.add(new UpdateManifest.UpdateEntry(op, path, sha256));
         }
     }
 }
