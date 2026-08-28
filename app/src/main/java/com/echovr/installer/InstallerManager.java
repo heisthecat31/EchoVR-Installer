@@ -1,16 +1,12 @@
 package com.echovr.installer;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.StatFs;
 import android.util.Log;
-
-import androidx.core.content.FileProvider;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -46,6 +42,7 @@ public class InstallerManager {
         void onTaskFinished();
         void onUpdateAvailable(String version, String notes, String downloadUrl);
         void onUpdateNotAvailable();
+        void onBaseApkUpdateAvailable(UpdateManifest manifest);
     }
 
     private final Context context;
@@ -58,12 +55,12 @@ public class InstallerManager {
 
     private static final String REMOTE_CONFIG_URL = "https://github.com/heisthecat31/EchoVR-Installer/releases/download/Installer/config.json";
 
-    public String echoVrLegacyUrl = "https://files.echovr.de/r15_26-06-25.apk";
     public String dataUrl = "https://mia.cdn.echo.taxi/_data.zip";
     public String enhancedGraphicsUrl = "https://mia.cdn.echo.taxi/questEchoTextureMod_Alpha_v0.1_06-10-25.apk";
     public String backupDataUrl = "https://files.echovr.de/_data.zip";
-    public String backupLegacyUrl = "https://evr.echo.taxi/r15_26-06-25.apk";
     public String backupEnhancedGraphicsUrl = "https://files.echovr.de/cat/questEchoTextureMod_Alpha_v0.1_06-10-25.apk";
+
+    public static final String INSTALLER_VERSION = "0.9.4b-006";
 
     private static final String GITHUB_RELEASES_URL = "https://api.github.com/repos/heisthecat31/EchoVR-Installer/releases/latest";
     private static final String TARGET_DIR = "Android/media/com.readyatdawn.r15/files";
@@ -136,22 +133,18 @@ public class InstallerManager {
                 }
 
                 JSONObject config = new JSONObject(jsonResponse);
-                if (config.has("legacyUrl")) echoVrLegacyUrl = config.getString("legacyUrl");
                 if (config.has("dataUrl")) dataUrl = config.getString("dataUrl");
                 if (config.has("enhancedUrl")) enhancedGraphicsUrl = config.getString("enhancedUrl");
-                if (config.has("backupLegacyUrl")) backupLegacyUrl = config.getString("backupLegacyUrl");
                 if (config.has("backupDataUrl")) backupDataUrl = config.getString("backupDataUrl");
                 if (config.has("backupEnhancedUrl")) backupEnhancedGraphicsUrl = config.getString("backupEnhancedUrl");
 
-            } catch (Exception ignored) { 
+            } catch (Exception ignored) {
                 try {
                     String cached = prefs.getString("config_json_data", null);
                     if (cached != null) {
                         JSONObject config = new JSONObject(cached);
-                        if (config.has("legacyUrl")) echoVrLegacyUrl = config.getString("legacyUrl");
                         if (config.has("dataUrl")) dataUrl = config.getString("dataUrl");
                         if (config.has("enhancedUrl")) enhancedGraphicsUrl = config.getString("enhancedUrl");
-                        if (config.has("backupLegacyUrl")) backupLegacyUrl = config.getString("backupLegacyUrl");
                         if (config.has("backupDataUrl")) backupDataUrl = config.getString("backupDataUrl");
                         if (config.has("backupEnhancedUrl")) backupEnhancedGraphicsUrl = config.getString("backupEnhancedUrl");
                     }
@@ -161,7 +154,67 @@ public class InstallerManager {
     }
 
     public void installLegacyEchoVr() {
-        downloadAndInstallApkWithBackup(echoVrLegacyUrl, backupLegacyUrl, "Legacy Echo VR", "echo_vr_legacy.apk");
+        if (!hasEnoughSpace()) return;
+        isTaskCancelled = false;
+        mainHandler.post(listener::onTaskStarted);
+
+        currentTask = executorService.submit(() -> {
+            try {
+                mainHandler.post(() -> listener.onProgress(-1, "Fetching update manifest..."));
+                UpdateManifest manifest = ManifestParser.parseFromUrl(UpdateManager.DEFAULT_MANIFEST_URL);
+
+                File apkFile = downloadBaseApkFromManifest(manifest);
+                if (apkFile == null && !isTaskCancelled) {
+                    throw new Exception("Echo VR download failed from all mirrors.");
+                }
+
+                final File finalApk = apkFile;
+                mainHandler.post(() -> {
+                    listener.onTaskFinished();
+                    if (!isTaskCancelled && finalApk != null && finalApk.exists()) {
+                        writeMarkerFile(finalApk, finalApk, FileUtil.INSTALL_SOURCE_MANIFEST);
+                        launchApkInstaller(finalApk);
+                    }
+                });
+            } catch (Exception e) {
+                Log.e("InstallerManager", "Legacy Echo VR install failed", e);
+                mainHandler.post(() -> {
+                    listener.onTaskFinished();
+                    if (!isTaskCancelled) listener.onError("Echo VR install failed: " + e.getMessage());
+                });
+            }
+        });
+    }
+
+    /**
+     * Resolves BASE_APK from the update manifest and downloads it as {mirror}/{BASE_APK},
+     * trying each mirror in UpdateManifest.APK_MIRRORS in order, verifying SHA256 against
+     * the manifest's BASE_APK hash. Reuses the resumable downloadFile() used elsewhere so
+     * progress reporting and partial-download resume behave the same as any other install.
+     */
+    private File downloadBaseApkFromManifest(UpdateManifest manifest) {
+        String fileName = manifest.baseApkName;
+        for (int i = 0; i < UpdateManifest.APK_MIRRORS.length; i++) {
+            if (isTaskCancelled) return null;
+
+            String mirror = UpdateManifest.APK_MIRRORS[i];
+            String url = (mirror.endsWith("/") ? mirror : mirror + "/") + fileName;
+            boolean isBackup = i > 0;
+            if (isBackup) {
+                mainHandler.post(() -> listener.onProgress(0, "Primary mirror failed, trying backup..."));
+            }
+
+            File apk = downloadFile(url, "apk", fileName, "Echo VR", isBackup);
+            if (apk != null && !isTaskCancelled) {
+                String hash = FileUtil.calculateSHA256(apk);
+                if (manifest.baseApkHash.equalsIgnoreCase(hash)) {
+                    return apk;
+                }
+                Log.e("InstallerManager", "Hash mismatch downloading " + fileName + " from " + mirror);
+                apk.delete();
+            }
+        }
+        return null;
     }
 
     public void installEnhancedGraphics() {
@@ -191,17 +244,18 @@ public class InstallerManager {
 
                 // 2. Patch, Align, and Sign
                 // We use a callback to pipe the status updates to the UI
-                mainHandler.post(() -> listener.onProgress(-1, "Starting Patch Process..."));
+                mainHandler.post(() -> listener.onProgress(-1, "Applying Custom Graphics..."));
                 
-                File finalApk = ApkPatcher.patchApk(context, baseApk, true, status -> 
+                File finalApk = ApkPatcher.applyBetterGraphicsMod(context, baseApk, status -> 
                     mainHandler.post(() -> listener.onProgress(-1, status))
                 );
 
                 mainHandler.post(() -> {
                     listener.onTaskFinished();
                     if (!isTaskCancelled && finalApk.exists()) {
+                        writeMarkerFile(baseApk, finalApk, FileUtil.INSTALL_SOURCE_CUSTOM);
                         launchApkInstaller(finalApk);
-                        listener.onSuccess("Patching complete! Prompting install...");
+                        listener.onSuccess("Graphics patch complete! Prompting install...");
                     } else if (!isTaskCancelled) {
                         listener.onError("Patching failed to produce output.");
                     }
@@ -236,26 +290,14 @@ public class InstallerManager {
             }
 
             if (apkFile != null && !isTaskCancelled) {
-                try {
-                    mainHandler.post(() -> listener.onProgress(-1, "Applying Paths Patch..."));
-                    File patchedApk = ApkPatcher.patchApk(context, apkFile, false, status -> 
-                        mainHandler.post(() -> listener.onProgress(-1, status))
-                    );
-                    mainHandler.post(() -> {
-                        listener.onTaskFinished();
-                        if (!isTaskCancelled && patchedApk.exists()) {
-                            launchApkInstaller(patchedApk);
-                        } else if (!isTaskCancelled) {
-                            listener.onError("Patching failed to produce output.");
-                        }
-                    });
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    mainHandler.post(() -> {
-                        listener.onTaskFinished();
-                        if (!isTaskCancelled) listener.onError("Patching Error: " + e.getMessage());
-                    });
-                }
+                File finalApk = apkFile;
+                mainHandler.post(() -> {
+                    listener.onTaskFinished();
+                    if (!isTaskCancelled && finalApk.exists()) {
+                        writeMarkerFile(finalApk, finalApk, FileUtil.INSTALL_SOURCE_CUSTOM);
+                        launchApkInstaller(finalApk);
+                    }
+                });
             } else {
                 mainHandler.post(() -> {
                     listener.onTaskFinished();
@@ -269,6 +311,11 @@ public class InstallerManager {
         if (!hasEnoughSpace()) return;
         isTaskCancelled = false;
         mainHandler.post(listener::onTaskStarted);
+
+        // Run concurrently with the data download/extraction below, not after it - patches
+        // don't actually depend on game data being present (they're separate files under
+        // Target), only on the base APK, so there's no reason to make them wait in line.
+        ModPatchService.start(context);
 
         currentTask = executorService.submit(() -> {
             File zipFile = downloadFile(dataUrl, "downloads", "game_data.zip", "Game Data", false);
@@ -458,15 +505,18 @@ public class InstallerManager {
 
     private void launchApkInstaller(File apkFile) {
         try {
-            Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", apkFile);
-            Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
-            intent.setData(apkUri);
-            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
-            intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true);
-            intent.putExtra(Intent.EXTRA_RETURN_RESULT, true);
-            context.startActivity(intent);
+            FileUtil.launchApkInstaller(context, apkFile);
         } catch (Exception e) {
             listener.onError("Could not launch installer.");
+        }
+    }
+
+    private void writeMarkerFile(File baseApkFile, File installedApkFile, String installSource) {
+        try {
+            File targetDir = new File(Environment.getExternalStorageDirectory(), "Android/media/com.readyatdawn.r15");
+            FileUtil.writeInstallerMarker(targetDir, baseApkFile, installedApkFile, INSTALLER_VERSION, installSource);
+        } catch (Exception e) {
+            Log.e("InstallerManager", "Failed to write marker file", e);
         }
     }
 
@@ -500,7 +550,15 @@ public class InstallerManager {
     }
 
     public void checkForUpdates(String currentVersion) {
-        mainHandler.post(listener::onTaskStarted);
+        checkForUpdates(currentVersion, false);
+    }
+
+    /**
+     * @param silent when true (e.g. an automatic startup check), stays quiet unless an
+     *               update is actually found - no progress UI, no "no updates" toast/error.
+     */
+    public void checkForUpdates(String currentVersion, boolean silent) {
+        if (!silent) mainHandler.post(listener::onTaskStarted);
         executorService.execute(() -> {
             try {
                 URL url = new URL(GITHUB_RELEASES_URL);
@@ -530,17 +588,19 @@ public class InstallerManager {
 
                 String finalUrl = downloadUrl;
                 mainHandler.post(() -> {
-                    listener.onTaskFinished();
+                    if (!silent) listener.onTaskFinished();
                     if (isNewVersion(currentVersion, remoteVerName)) {
                         listener.onUpdateAvailable(remoteVerName, notes, finalUrl);
-                    } else {
+                    } else if (!silent) {
                         listener.onUpdateNotAvailable();
                     }
                 });
             } catch (Exception e) {
                 mainHandler.post(() -> {
-                    listener.onTaskFinished();
-                    listener.onError("Update check failed");
+                    if (!silent) {
+                        listener.onTaskFinished();
+                        listener.onError("Update check failed");
+                    }
                 });
             }
         });

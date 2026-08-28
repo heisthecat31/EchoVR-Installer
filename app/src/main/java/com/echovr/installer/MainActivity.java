@@ -40,12 +40,13 @@ import java.util.regex.Pattern;
 public class MainActivity extends AppCompatActivity implements InstallerManager.Listener {
 
     private InstallerManager manager;
+    private UpdateManager updateManager;
     private SharedPreferences prefs;
 
     // UI Elements
     private LinearLayout gameSelectionLayout, mainContentLayout;
     private TextView statusText;
-    private Button downloadButton, reinstallButton, grantPermissionsButton, launchEchoVRButton, uninstallEchoVRButton;
+    private Button downloadButton, reinstallButton, checkGameUpdatesButton, grantPermissionsButton, launchEchoVRButton, uninstallEchoVRButton;
     private Button helpButtonGame, helpButtonMain;
     private AlertDialog progressDialog;
 
@@ -53,8 +54,9 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     private static final String PREF_PERMISSION_POPUP_SHOWN = "permission_popup_shown";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
     private static final String DISCORD_INVITE_URL = "https://discord.gg/KQ8qGPKQeF";
-    private static final String CURRENT_VERSION = "3.9";
+    private static final String CURRENT_VERSION = "4.2";
     private boolean justInstalledEchoVr = false;
+    private boolean hasCheckedForModUpdates = false;
 
     // Permissions Launchers
     private final ActivityResultLauncher<Intent> manageStorageLauncher = registerForActivityResult(
@@ -79,10 +81,12 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         manager = new InstallerManager(this, this);
+        updateManager = new UpdateManager(this, this);
         manager.fetchRemoteConfig();
+        manager.checkForUpdates(CURRENT_VERSION, true);
 
         initializeViews();
-        checkInstallPermission(); 
+        checkInstallPermission();
     }
 
     private void setupFullscreenTransparent() {
@@ -103,21 +107,21 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
         downloadButton = findViewById(R.id.downloadButton);
         reinstallButton = findViewById(R.id.reinstallButton);
+        checkGameUpdatesButton = findViewById(R.id.checkGameUpdatesButton);
         grantPermissionsButton = findViewById(R.id.grantPermissionsButton);
         launchEchoVRButton = findViewById(R.id.launchEchoVRButton);
-        uninstallEchoVRButton = findViewById(R.id.viewLobbyLinkButton); 
+        uninstallEchoVRButton = findViewById(R.id.viewLobbyLinkButton);
         uninstallEchoVRButton.setText("UNINSTALL ECHO VR");
 
         // Options
         findViewById(R.id.legacyOption).setOnClickListener(v -> showLegacyWarningDialog());
         findViewById(R.id.newPlayerOption).setOnClickListener(v -> showNewPlayerDialog());
-        
-        // --- NEW BUTTON: BETTER GRAPHICS NEW PLAYER ---
-        findViewById(R.id.betterGraphicsOption).setOnClickListener(v -> showBetterGraphicsDialog());
+
 
         // Actions
         downloadButton.setOnClickListener(v -> manager.installGameData());
         reinstallButton.setOnClickListener(v -> showConfirmDialog("Reinstall Game Data", "This will re-download all game data.", () -> manager.installGameData()));
+        checkGameUpdatesButton.setOnClickListener(v -> updateManager.checkAndApplyUpdates(null, false));
         grantPermissionsButton.setOnClickListener(v -> openAppPermissions());
         launchEchoVRButton.setOnClickListener(v -> launchEchoVR());
 
@@ -186,7 +190,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         mainLayout.addView(apkUrlInput);
 
         Button discordButton = new Button(this);
-        discordButton.setText("GET APK FROM DISCORD (Press Me)");
+        discordButton.setText("GET APK FROM DISCORD");
         discordButton.setTextColor(Color.WHITE);
         discordButton.setBackground(getResources().getDrawable(R.drawable.button_background));
         discordButton.setPadding(40, 15, 40, 15);
@@ -268,14 +272,21 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
                 statusText.setTextColor(Color.GREEN);
                 downloadButton.setVisibility(View.GONE);
                 reinstallButton.setVisibility(View.VISIBLE);
+                checkGameUpdatesButton.setVisibility(View.VISIBLE);
                 grantPermissionsButton.setVisibility(View.VISIBLE);
                 launchEchoVRButton.setVisibility(View.VISIBLE);
                 uninstallEchoVRButton.setVisibility(View.VISIBLE);
+
+                if (!hasCheckedForModUpdates) {
+                    hasCheckedForModUpdates = true;
+                    ModPatchService.start(this);
+                }
             } else {
                 statusText.setText("Game data missing");
                 statusText.setTextColor(Color.parseColor("#ff9800"));
                 downloadButton.setVisibility(View.VISIBLE);
                 reinstallButton.setVisibility(View.GONE);
+                checkGameUpdatesButton.setVisibility(View.GONE);
                 grantPermissionsButton.setVisibility(View.GONE);
                 launchEchoVRButton.setVisibility(View.GONE);
                 uninstallEchoVRButton.setVisibility(View.GONE);
@@ -358,6 +369,35 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         Toast.makeText(this, "No updates available", Toast.LENGTH_SHORT).show();
     }
 
+    @Override
+    public void onBaseApkUpdateAvailable(UpdateManifest manifest) {
+        new AlertDialog.Builder(this)
+                .setTitle("Update EchoVR")
+                .setMessage(buildEchoVrChangeSummary(manifest))
+                .setPositiveButton("DOWNLOAD & INSTALL", (d, w) -> updateManager.downloadAndInstallBaseApk(manifest))
+                .setNegativeButton("LATER", null)
+                .show();
+    }
+
+    @SuppressLint("SetTextI18n")
+    private String buildEchoVrChangeSummary(UpdateManifest manifest) {
+        int added = 0, removed = 0;
+        for (UpdateManifest.UpdateEntry entry : manifest.entries) {
+            if ("add".equalsIgnoreCase(entry.op)) added++;
+            else if ("del".equalsIgnoreCase(entry.op)) removed++;
+        }
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("A new Echo VR build is available:\n").append(manifest.baseApkName).append("\n\n");
+        sb.append("What's new:\n");
+        sb.append("• ").append(added).append(added == 1 ? " file to update\n" : " files to update\n");
+        if (removed > 0) {
+            sb.append("• ").append(removed).append(removed == 1 ? " file to remove\n" : " files to remove\n");
+        }
+        sb.append("\nYour installed game no longer matches this build, so mod updates can't be applied until it's updated.\n\nDownload and install now?");
+        return sb.toString();
+    }
+
     // --- Permissions ---
 
     private void checkInstallPermission() {
@@ -397,23 +437,39 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
             }
         } else {
             if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 100);
+                ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, STORAGE_PERMISSION_REQUEST_CODE);
             } else {
                 checkState();
             }
+        }
+        checkNotificationPermission();
+    }
+
+    private static final int STORAGE_PERMISSION_REQUEST_CODE = 100;
+    private static final int NOTIFICATION_PERMISSION_REQUEST_CODE = 101;
+
+    private void checkNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST_CODE);
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == 100 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            checkState();
-        } else {
-            Toast.makeText(this, "Permission denied. App cannot function.", Toast.LENGTH_SHORT).show();
+        boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        if (requestCode == STORAGE_PERMISSION_REQUEST_CODE) {
+            if (granted) {
+                checkState();
+            } else {
+                Toast.makeText(this, "Permission denied. App cannot function.", Toast.LENGTH_SHORT).show();
+            }
         }
+        // NOTIFICATION_PERMISSION_REQUEST_CODE is optional - background installs still work
+        // without it, just without a visible progress notification. Nothing to do either way.
     }
-    
+
 
     private void showProgressDialog(String message) {
         runOnUiThread(() -> {
@@ -424,7 +480,10 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
             progressDialog = new AlertDialog.Builder(this)
                     .setView(view)
                     .setCancelable(false)
-                    .setNegativeButton("Cancel", (d, w) -> manager.cancelCurrentTask())
+                    .setNegativeButton("Cancel", (d, w) -> {
+                        manager.cancelCurrentTask();
+                        updateManager.cancel();
+                    })
                     .create();
             progressDialog.show();
         });
@@ -468,7 +527,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         mainLayout.addView(apkUrlInput);
 
         Button discordButton = new Button(this);
-        discordButton.setText("GET APK FROM DISCORD (Press Me)");
+        discordButton.setText("GET APK FROM DISCORD");
         discordButton.setTextColor(Color.WHITE);
         discordButton.setBackground(getResources().getDrawable(R.drawable.button_background));
         discordButton.setPadding(40, 15, 40, 15);
@@ -564,12 +623,15 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     }
 
     private void showPermissionGuidance() {
-        openAppPermissions();
-        Toast.makeText(this, "Please Grant Microphone Permission For Voice Chat", Toast.LENGTH_LONG).show();
+        // Android requires a human tap to grant another app's runtime permissions - there's
+        // no API for us to flip them on for Echo VR automatically. Explain first, then hand
+        // off to its App Info screen so the toggles are one tap away instead of the user
+        // having to find it themselves.
         new AlertDialog.Builder(this)
                 .setTitle("Permissions Recommended")
-                .setMessage("To use voice chat in Echo VR, please grant the Microphone permission.")
-                .setPositiveButton("OK", null)
+                .setMessage("Echo VR needs its own permissions - Microphone for voice chat, plus any others it requests.\n\nTap Continue to open its App Info page, then grant them there. Android doesn't allow us to do this for you automatically.")
+                .setPositiveButton("Continue", (d, w) -> openAppPermissions())
+                .setNegativeButton("Later", null)
                 .setCancelable(false)
                 .show();
         prefs.edit().putBoolean(PREF_PERMISSION_POPUP_SHOWN, true).apply();
@@ -644,16 +706,41 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     protected void onResume() {
         super.onResume();
         checkState();
-        
-        new Handler(Looper.getMainLooper()).postDelayed(this::checkState, 2000);
 
-        if (manager.verifyDataInstallation() && !isPackageInstalled(ECHO_VR_PACKAGE)) {
-            checkState();
+        // PackageManager can take a while to settle after returning from the system
+        // installer, and focus bounces between us/the installer/Echo VR/etc. repeatedly
+        // during that flow - each bounce used to cancel the poll before its delay ever
+        // elapsed, so it could go a full 30s+ without ever firing once. Don't cancel on
+        // pause: keep an already-scheduled poll running in the background regardless of
+        // whether this Activity is currently visible, and only start a new polling run if
+        // one isn't already in flight (so repeated resumes don't keep resetting it to 0).
+        if (!pollingActive && !(isPackageInstalled(ECHO_VR_PACKAGE) && manager.verifyDataInstallation())) {
+            pollingActive = true;
+            resumePollAttempts = 0;
+            resumePollHandler.postDelayed(this::pollInstallState, RESUME_POLL_INTERVAL_MS);
         }
+    }
+
+    private final Handler resumePollHandler = new Handler(Looper.getMainLooper());
+    private boolean pollingActive;
+    private int resumePollAttempts;
+    private static final int RESUME_POLL_MAX_ATTEMPTS = 20;
+    private static final long RESUME_POLL_INTERVAL_MS = 1500;
+
+    private void pollInstallState() {
+        checkState();
+        resumePollAttempts++;
+        boolean settled = isPackageInstalled(ECHO_VR_PACKAGE) && manager.verifyDataInstallation();
+        if (settled || resumePollAttempts >= RESUME_POLL_MAX_ATTEMPTS) {
+            pollingActive = false;
+            return;
+        }
+        resumePollHandler.postDelayed(this::pollInstallState, RESUME_POLL_INTERVAL_MS);
     }
 
     @Override
     protected void onDestroy() {
+        resumePollHandler.removeCallbacksAndMessages(null);
         manager.shutdown();
         super.onDestroy();
     }

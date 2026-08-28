@@ -10,8 +10,8 @@ android {
         applicationId = "com.echovr.installer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 39
-        versionName = "3.9"
+        versionCode = 42
+        versionName = "4.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
