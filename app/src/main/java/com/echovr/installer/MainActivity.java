@@ -54,7 +54,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     private static final String PREF_PERMISSION_POPUP_SHOWN = "permission_popup_shown";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
     private static final String DISCORD_INVITE_URL = "https://discord.gg/KQ8qGPKQeF";
-    private static final String CURRENT_VERSION = "4.2";
+    private static final String CURRENT_VERSION = "4.3";
     private boolean justInstalledEchoVr = false;
     private boolean hasCheckedForModUpdates = false;
 
