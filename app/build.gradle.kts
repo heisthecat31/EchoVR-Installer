@@ -36,8 +36,4 @@ dependencies {
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
-
-    // Tools for APK Editing
-    implementation("com.github.iyxan23:zipalign-java:1.2.2")
-    implementation("com.github.MuntashirAkon:apksig-android:4.4.0")
 }
