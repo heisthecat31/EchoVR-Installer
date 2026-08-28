@@ -225,53 +225,6 @@ public class InstallerManager {
         startApkDownload(url, "Custom APK", false, null, "echo_vr_custom.apk");
     }
 
-    // --- NEW METHOD FOR BETTER GRAPHICS PATCHING ---
-    public void installBetterGraphics(String apkUrl) {
-        if (!hasEnoughSpace()) return;
-        isTaskCancelled = false;
-        mainHandler.post(listener::onTaskStarted);
-
-        currentTask = executorService.submit(() -> {
-            try {
-                // 1. Download Base APK
-                mainHandler.post(() -> listener.onProgress(0, "Downloading base APK..."));
-                // Download to cache first
-                File baseApk = downloadFile(apkUrl, "cache", "base_echo.apk", "Base APK", false);
-                
-                if (baseApk == null || isTaskCancelled) {
-                    throw new Exception("Download failed or cancelled");
-                }
-
-                // 2. Patch, Align, and Sign
-                // We use a callback to pipe the status updates to the UI
-                mainHandler.post(() -> listener.onProgress(-1, "Applying Custom Graphics..."));
-                
-                File finalApk = ApkPatcher.applyBetterGraphicsMod(context, baseApk, status -> 
-                    mainHandler.post(() -> listener.onProgress(-1, status))
-                );
-
-                mainHandler.post(() -> {
-                    listener.onTaskFinished();
-                    if (!isTaskCancelled && finalApk.exists()) {
-                        writeMarkerFile(baseApk, finalApk, FileUtil.INSTALL_SOURCE_CUSTOM);
-                        launchApkInstaller(finalApk);
-                        listener.onSuccess("Graphics patch complete! Prompting install...");
-                    } else if (!isTaskCancelled) {
-                        listener.onError("Patching failed to produce output.");
-                    }
-                });
-
-            } catch (Exception e) {
-                e.printStackTrace();
-                mainHandler.post(() -> {
-                    listener.onTaskFinished();
-                    listener.onError("Error: " + e.getMessage());
-                });
-            }
-        });
-    }
-    // -----------------------------------------------
-
     private void downloadAndInstallApkWithBackup(String primaryUrl, String backupUrl, String name, String saveFileName) {
         startApkDownload(primaryUrl, name, true, backupUrl, saveFileName);
     }
