@@ -92,6 +92,16 @@ public class FileUtil {
         }
     }
 
+    public static void copyFile(File src, File dst) throws IOException {
+        File parent = dst.getParentFile();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+        try (FileInputStream in = new FileInputStream(src); FileOutputStream out = new FileOutputStream(dst)) {
+            byte[] buffer = new byte[65536];
+            int len;
+            while ((len = in.read(buffer)) != -1) out.write(buffer, 0, len);
+        }
+    }
+
     public static void launchApkInstaller(Context context, File apkFile) throws Exception {
         Uri apkUri = FileProvider.getUriForFile(context, context.getPackageName() + ".provider", apkFile);
         Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);

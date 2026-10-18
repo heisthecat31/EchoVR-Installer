@@ -20,6 +20,7 @@
 
     <queries>
         <package android:name="com.readyatdawn.r15" />
+        <package android:name="com.readyatdawn.afk" />
         <package android:name="com.oculus.vrshell" />
         <package android:name="com.oculus.systemux" />
         <package android:name="com.meta.quest" />
@@ -71,10 +72,23 @@
                 <data android:mimeType="application/vnd.android.package-archive" />
             </intent-filter>
 
+            <!-- "Open Echo VR Installer" link on the Discord sign-in callback page (DiscordAuth) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="echovrinstaller" android:host="auth" />
+            </intent-filter>
+
         </activity>
 
         <service
             android:name=".ModPatchService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <service
+            android:name=".DiscordAuthKeepAliveService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 

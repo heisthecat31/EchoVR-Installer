@@ -67,6 +67,7 @@ public class InstallerManager {
     private static final String DATA_FOLDER = "_data";
     private static final String PREFS_NAME = "EchoVRInstallerPrefs";
     private static final String PREF_INSTALLATION_DATE = "installation_date";
+    private static final String PREF_CUSTOM_APK_URL = "custom_apk_url";
     private static final long TOTAL_FILE_SIZE = 894L * 1024 * 1024;
     private static final long REQUIRED_SPACE_BYTES = 2500L * 1024 * 1024;
 
@@ -147,74 +148,10 @@ public class InstallerManager {
                         if (config.has("enhancedUrl")) enhancedGraphicsUrl = config.getString("enhancedUrl");
                         if (config.has("backupDataUrl")) backupDataUrl = config.getString("backupDataUrl");
                         if (config.has("backupEnhancedUrl")) backupEnhancedGraphicsUrl = config.getString("backupEnhancedUrl");
-                    }
+                                    }
                 } catch (Exception e) {}
             }
         });
-    }
-
-    public void installLegacyEchoVr() {
-        if (!hasEnoughSpace()) return;
-        isTaskCancelled = false;
-        mainHandler.post(listener::onTaskStarted);
-
-        currentTask = executorService.submit(() -> {
-            try {
-                mainHandler.post(() -> listener.onProgress(-1, "Fetching update manifest..."));
-                UpdateManifest manifest = ManifestParser.parseFromUrl(UpdateManager.DEFAULT_MANIFEST_URL);
-
-                File apkFile = downloadBaseApkFromManifest(manifest);
-                if (apkFile == null && !isTaskCancelled) {
-                    throw new Exception("Echo VR download failed from all mirrors.");
-                }
-
-                final File finalApk = apkFile;
-                mainHandler.post(() -> {
-                    listener.onTaskFinished();
-                    if (!isTaskCancelled && finalApk != null && finalApk.exists()) {
-                        writeMarkerFile(finalApk, finalApk, FileUtil.INSTALL_SOURCE_MANIFEST);
-                        launchApkInstaller(finalApk);
-                    }
-                });
-            } catch (Exception e) {
-                Log.e("InstallerManager", "Legacy Echo VR install failed", e);
-                mainHandler.post(() -> {
-                    listener.onTaskFinished();
-                    if (!isTaskCancelled) listener.onError("Echo VR install failed: " + e.getMessage());
-                });
-            }
-        });
-    }
-
-    /**
-     * Resolves BASE_APK from the update manifest and downloads it as {mirror}/{BASE_APK},
-     * trying each mirror in UpdateManifest.APK_MIRRORS in order, verifying SHA256 against
-     * the manifest's BASE_APK hash. Reuses the resumable downloadFile() used elsewhere so
-     * progress reporting and partial-download resume behave the same as any other install.
-     */
-    private File downloadBaseApkFromManifest(UpdateManifest manifest) {
-        String fileName = manifest.baseApkName;
-        for (int i = 0; i < UpdateManifest.APK_MIRRORS.length; i++) {
-            if (isTaskCancelled) return null;
-
-            String mirror = UpdateManifest.APK_MIRRORS[i];
-            String url = (mirror.endsWith("/") ? mirror : mirror + "/") + fileName;
-            boolean isBackup = i > 0;
-            if (isBackup) {
-                mainHandler.post(() -> listener.onProgress(0, "Primary mirror failed, trying backup..."));
-            }
-
-            File apk = downloadFile(url, "apk", fileName, "Echo VR", isBackup);
-            if (apk != null && !isTaskCancelled) {
-                String hash = FileUtil.calculateSHA256(apk);
-                if (manifest.baseApkHash.equalsIgnoreCase(hash)) {
-                    return apk;
-                }
-                Log.e("InstallerManager", "Hash mismatch downloading " + fileName + " from " + mirror);
-                apk.delete();
-            }
-        }
-        return null;
     }
 
     public void installEnhancedGraphics() {
@@ -222,7 +159,16 @@ public class InstallerManager {
     }
 
     public void installCustomApk(String url) {
-        startApkDownload(url, "Custom APK", false, null, "echo_vr_custom.apk");
+        // downloadFile() resumes whatever is already on disk under this name, and a full file
+        // from a previous link answers the Range request with 416 and gets reused as-is - so a
+        // new link (every Discord sign-in gives a fresh personal one) must start from scratch.
+        String saveFileName = "echo_vr_custom.apk";
+        if (!url.equals(prefs.getString(PREF_CUSTOM_APK_URL, null))) {
+            File dir = context.getExternalFilesDir("apk");
+            if (dir != null) new File(dir, saveFileName).delete();
+            prefs.edit().putString(PREF_CUSTOM_APK_URL, url).apply();
+        }
+        startApkDownload(url, "Echo VR", false, null, saveFileName);
     }
 
     private void downloadAndInstallApkWithBackup(String primaryUrl, String backupUrl, String name, String saveFileName) {
@@ -239,6 +185,9 @@ public class InstallerManager {
 
             if (apkFile == null && useBackup && !isTaskCancelled && backupUrl != null) {
                 mainHandler.post(() -> listener.onProgress(0, "First link failed, trying backup..."));
+                // Same reasoning as installGameData(): don't resume a partial file written by
+                // the primary host against a different backup host.
+                deleteStaleDownload("apk", saveFileName);
                 apkFile = downloadFile(backupUrl, "apk", saveFileName, name, true);
             }
 
@@ -275,6 +224,11 @@ public class InstallerManager {
 
             if (zipFile == null && !isTaskCancelled) {
                 mainHandler.post(() -> listener.onProgress(0, "Primary failed, trying backup..."));
+                // The partial file (if any) was being written from the primary host - resuming
+                // it against a different backup host via Range can silently splice together
+                // bytes from two different servers if they're not byte-identical, corrupting
+                // the archive. Start the backup attempt clean.
+                deleteStaleDownload("downloads", "game_data.zip");
                 zipFile = downloadFile(backupDataUrl, "downloads", "game_data.zip", "Game Data", true);
             }
 
@@ -305,6 +259,14 @@ public class InstallerManager {
                 }
             });
         });
+    }
+
+    /** Clears a partial download before switching to a different mirror/host for it. */
+    private void deleteStaleDownload(String dirType, String fileName) {
+        File dir = dirType.equals("cache") ? context.getExternalCacheDir() : context.getExternalFilesDir(dirType);
+        if (dir == null) return;
+        File file = new File(dir, fileName);
+        if (file.exists()) file.delete();
     }
 
     private File downloadFile(String urlString, String dirType, String fileName, String logName, boolean isBackup) {
@@ -368,6 +330,7 @@ public class InstallerManager {
             byte[] buffer = new byte[32768];
             long totalDownloaded = downloaded;
             int bytesRead;
+            int lastReportedProgress = -1;
 
             String prefix = isBackup ? "Backup " + logName : logName;
 
@@ -382,8 +345,15 @@ public class InstallerManager {
 
                 if (totalFileSize > 0) {
                     int progress = (int) ((totalDownloaded * 100) / totalFileSize);
-                    long mb = totalDownloaded / (1024 * 1024);
-                    mainHandler.post(() -> listener.onProgress(progress, "Downloading " + prefix + ": " + progress + "% (" + mb + "MB)"));
+                    // Posting to the main thread on every 32KB chunk (thousands of times for
+                    // a large APK/zip) floods the UI thread with Runnable/Message allocation
+                    // and string concatenation, which competes for CPU with the download
+                    // thread itself - only post when the displayed percentage actually moves.
+                    if (progress != lastReportedProgress) {
+                        lastReportedProgress = progress;
+                        long mb = totalDownloaded / (1024 * 1024);
+                        mainHandler.post(() -> listener.onProgress(progress, "Downloading " + prefix + ": " + progress + "% (" + mb + "MB)"));
+                    }
                 }
             }
 

@@ -7,4 +7,23 @@
     <color name="teal_700">#FF018786</color>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- Terminal redesign tokens -->
+    <color name="echo_bg">#FF090D13</color>
+    <color name="echo_surface">#FF111928</color>
+    <color name="echo_surface_2">#FF192234</color>
+    <color name="echo_border">#FF253148</color>
+    <color name="echo_text">#FFEEF3F8</color>
+    <color name="echo_text_dim">#FF8EA0B8</color>
+    <color name="echo_text_faint">#FF5B6B82</color>
+    <color name="echo_accent">#FF3FD4FF</color>
+    <color name="echo_accent_dim">#FF1C6C86</color>
+    <color name="echo_accent_wash">#FF15202F</color>
+    <color name="echo_good">#FF3EE08A</color>
+    <color name="echo_warn">#FFFFB648</color>
+    <color name="echo_danger">#FFFF5C72</color>
+    <color name="echo_scrim">#852D3A4D</color>
+    <color name="echo_good_wash">#1F3EE08A</color>
+    <color name="echo_warn_wash">#1FFFB648</color>
+    <color name="echo_accent_wash_chip">#1F3FD4FF</color>
 </resources>

@@ -10,8 +10,8 @@ android {
         applicationId = "com.echovr.installer"
         minSdk = 26
         targetSdk = 36
-        versionCode = 43
-        versionName = "4.3"
+        versionCode = 45
+        versionName = "4.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -33,6 +33,7 @@ android {
 dependencies {
     implementation(libs.appcompat)
     implementation(libs.material)
+    implementation(libs.apksig.android)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

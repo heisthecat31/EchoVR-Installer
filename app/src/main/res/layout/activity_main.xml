@@ -9,414 +9,470 @@
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="#80000000" />
+        android:background="@color/echo_scrim" />
 
-    <LinearLayout
+    <!-- ===================== GAME SELECTION (not installed) ===================== -->
+    <ScrollView
         android:id="@+id/gameSelectionLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center"
-        android:padding="30dp">
+        android:fillViewport="true">
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center"
-            android:layout_marginBottom="42dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ECHO VR"
-                android:textColor="#4fc3f7"
-                android:textSize="36sp"
-                android:textStyle="bold" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="INSTALLATION MANAGER"
-                android:textColor="#ffffff"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:layout_marginTop="5dp" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/newPlayerOption"
-            android:layout_width="280dp"
-            android:layout_height="80dp"
-            android:background="@drawable/option_card_background"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:padding="15dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🆕"
-                android:textSize="20sp"
-                android:layout_marginEnd="10dp" />
+            android:gravity="center_horizontal"
+            android:padding="24dp">
 
             <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="New Player"
-                    android:textColor="#4fc3f7"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Get latest APK from Discord"
-                    android:textColor="#bbdefb"
-                    android:textSize="10sp"
-                    android:layout_marginTop="2dp" />
-
-            </LinearLayout>
-
-
-            </LinearLayout>
-
-
-        <LinearLayout
-            android:id="@+id/legacyOption"
-            android:layout_width="180dp"
-            android:layout_height="40dp"
-            android:background="@drawable/option_card_background"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:padding="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:layout_marginBottom="12dp">
-
-            <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🎮"
-                android:textSize="12sp"
-                android:layout_marginEnd="6dp" />
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
                 android:orientation="vertical"
-                android:gravity="center_vertical">
+                android:gravity="center"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="24dp">
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Backup Option"
-                    android:textColor="#4fc3f7"
+                    android:fontFamily="sans-serif-condensed"
+                    android:textStyle="bold"
+                    android:textSize="32sp"
+                    android:letterSpacing="0.04"
+                    android:text="ECHO VR"
+                    android:textColor="@color/echo_text" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
                     android:textSize="10sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="I previously owned Echo VR"
-                    android:textColor="#bbdefb"
-                    android:textSize="7sp" />
+                    android:letterSpacing="0.18"
+                    android:text="INSTALLATION MANAGER"
+                    android:textColor="@color/echo_text_faint"
+                    android:layout_marginTop="4dp" />
 
             </LinearLayout>
 
-        </LinearLayout>
+            <!-- Status card -->
+            <LinearLayout
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/card_background"
+                android:padding="14dp"
+                android:layout_marginBottom="16dp">
 
-        <LinearLayout
-            android:layout_width="300dp"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="4dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="monospace"
+                    android:textSize="10sp"
+                    android:letterSpacing="0.1"
+                    android:text="STATUS"
+                    android:textColor="@color/echo_text_faint" />
 
-            <Button
-                android:id="@+id/clearCacheButtonGame"
+                <TextView
+                    android:id="@+id/statusChipGame"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/chip_warn_background"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:fontFamily="sans-serif-condensed"
+                    android:textStyle="bold"
+                    android:textSize="12sp"
+                    android:text="●  Not installed"
+                    android:textColor="@color/echo_warn" />
+
+            </LinearLayout>
+
+            <!-- New Player primary card - the hero action on this screen -->
+            <LinearLayout
+                android:id="@+id/newPlayerOption"
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"
+                android:background="@drawable/primary_card_background"
+                android:elevation="10dp"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textStyle="bold"
+                    android:textSize="10sp"
+                    android:letterSpacing="0.12"
+                    android:text="★ START HERE"
+                    android:textColor="@color/echo_accent"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <FrameLayout
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:background="@drawable/icon_well_accent_background">
+
+                        <ImageView
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:layout_gravity="center"
+                            android:src="@drawable/ic_person"
+                            app:tint="@color/echo_accent" />
+                    </FrameLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-condensed"
+                            android:textStyle="bold"
+                            android:textSize="18sp"
+                            android:text="New Player"
+                            android:textColor="@color/echo_text" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textSize="11sp"
+                            android:text="Sign in with Discord for your personal APK"
+                            android:textColor="@color/echo_text_dim"
+                            android:layout_marginTop="1dp" />
+
+                    </LinearLayout>
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:src="@drawable/ic_chevron_right"
+                        app:tint="@color/echo_accent" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="280dp"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:textSize="11sp"
+                android:text="After Echo VR is installed, game data installation will be required."
+                android:textColor="@color/echo_text_faint"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="20dp"
+                android:lineSpacingExtra="2dp" />
+
+            <View
                 android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="0.9"
-                android:text="CLEAR CACHE"
-                android:textColor="#ffcc80"
-                android:textSize="9.2sp"
-                android:textStyle="bold"
-                android:background="@drawable/utility_button_background"
-                android:layout_marginEnd="5dp" />
+                android:layout_height="0dp"
+                android:layout_weight="1" />
 
-            <Button
-                android:id="@+id/checkUpdatesButtonGame"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:text="CHECK UPDATES"
-                android:textColor="#c8e6c9"
-                android:textSize="9.1sp"
-                android:textStyle="bold"
-                android:background="@drawable/utility_button_background"
-                android:layout_marginEnd="5dp" />
+            <LinearLayout
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="18dp">
 
-            <Button
-                android:id="@+id/helpButtonGame"
-                android:layout_width="50dp"
-                android:layout_height="40dp"
-                android:text="❓"
-                android:textSize="14sp"
+                <LinearLayout
+                    android:id="@+id/clearCacheButtonGame"
+                    style="@style/UtilButton">
+                    <ImageView style="@style/UtilButtonIcon" android:src="@drawable/ic_trash" />
+                    <TextView style="@style/UtilButtonLabel" android:text="CACHE" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/checkUpdatesButtonGame"
+                    style="@style/UtilButton">
+                    <ImageView style="@style/UtilButtonIcon" android:src="@drawable/ic_refresh" />
+                    <TextView style="@style/UtilButtonLabel" android:text="APP UPDATE" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/settingsButtonGame"
+                    style="@style/UtilButton">
+                    <ImageView style="@style/UtilButtonIcon" android:src="@drawable/ic_settings" />
+                    <TextView style="@style/UtilButtonLabel" android:text="SETTINGS" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/helpButtonGame"
+                    style="@style/UtilButton">
+                    <ImageView style="@style/UtilButtonIcon" android:src="@drawable/ic_help" />
+                    <TextView style="@style/UtilButtonLabel" android:text="HELP" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
                 android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                android:background="@drawable/help_button_background"
-                android:gravity="center" />
+                android:text="Installer by he_is_the_cat"
+                android:textColor="@color/echo_text_faint" />
+
+            <TextView
+                android:id="@+id/versionTextGame"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:textSize="10sp"
+                android:textColor="@color/echo_text_faint"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="8dp" />
 
         </LinearLayout>
+    </ScrollView>
 
-        <TextView
-            android:layout_width="280dp"
-            android:layout_height="wrap_content"
-            android:text="After Echo VR is installed, game data installation will be required."
-            android:textColor="#90caf9"
-            android:textSize="11sp"
-            android:gravity="center"
-            android:layout_marginTop="2dp"
-            android:lineSpacingExtra="2dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Installer was made by he_is_the_cat"
-            android:textColor="#bb86fc"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp" />
-
-        <TextView
-            android:id="@+id/versionTextGame"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#bbdefb"
-            android:textSize="10sp"
-            android:layout_marginTop="4dp" />
-
-    </LinearLayout>
-
-    <LinearLayout
+    <!-- ===================== INSTALLED DASHBOARD ===================== -->
+    <ScrollView
         android:id="@+id/mainContentLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:gravity="center_horizontal"
-        android:padding="25dp"
+        android:fillViewport="true"
         android:visibility="gone">
 
         <LinearLayout
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:gravity="center"
-            android:layout_marginBottom="22dp">
+            android:gravity="center_horizontal"
+            android:padding="24dp">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="ECHO VR"
-                android:textColor="#4fc3f7"
-                android:textSize="32sp"
-                android:textStyle="bold" />
+                android:orientation="vertical"
+                android:gravity="center"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="18dp">
 
-            <TextView
-                android:layout_width="wrap_content"
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-condensed"
+                    android:textStyle="bold"
+                    android:textSize="28sp"
+                    android:letterSpacing="0.04"
+                    android:text="ECHO VR"
+                    android:textColor="@color/echo_text" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:textSize="10sp"
+                    android:letterSpacing="0.18"
+                    android:text="INSTALLER"
+                    android:textColor="@color/echo_text_faint"
+                    android:layout_marginTop="4dp" />
+
+            </LinearLayout>
+
+            <!-- Status card -->
+            <LinearLayout
+                android:layout_width="300dp"
                 android:layout_height="wrap_content"
-                android:text="INSTALLER"
-                android:textColor="#ffffff"
-                android:textSize="14sp"
+                android:orientation="vertical"
+                android:background="@drawable/card_background"
+                android:padding="14dp"
+                android:layout_marginBottom="14dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:fontFamily="monospace"
+                        android:textSize="10sp"
+                        android:letterSpacing="0.1"
+                        android:text="STATUS"
+                        android:textColor="@color/echo_text_faint" />
+
+                    <TextView
+                        android:id="@+id/statusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/chip_good_background"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp"
+                        android:fontFamily="sans-serif-condensed"
+                        android:textStyle="bold"
+                        android:textSize="12sp"
+                        android:text="●  Checking..."
+                        android:textColor="@color/echo_good" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <!-- Primary CTA -->
+            <Button
+                android:id="@+id/launchEchoVRButton"
+                android:layout_width="300dp"
+                android:layout_height="52dp"
+                android:text="▶   LAUNCH ECHO VR"
+                android:textColor="#04161D"
+                android:fontFamily="sans-serif-condensed"
                 android:textStyle="bold"
+                android:textSize="15sp"
+                android:letterSpacing="0.02"
+                android:background="@drawable/cta_button_background"
+                android:visibility="gone"
+                android:layout_marginBottom="10dp" />
+
+            <!-- Maintenance action list -->
+            <LinearLayout
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="@drawable/card_background"
+                android:layout_marginBottom="14dp">
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/checkGameUpdatesButton"
+                    style="@style/ActionRow"
+                    android:text="Check Echo Updates"
+                    android:drawableStart="@drawable/ic_refresh"
+                    android:visibility="gone" />
+
+                <View style="@style/RowDivider" android:id="@+id/divider1" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/downloadButton"
+                    style="@style/ActionRow"
+                    android:text="Download Game Data (894MB)"
+                    android:drawableStart="@drawable/ic_trash" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/reinstallButton"
+                    style="@style/ActionRow"
+                    android:text="Reinstall Game Data"
+                    android:drawableStart="@drawable/ic_trash"
+                    android:visibility="gone" />
+
+                <View style="@style/RowDivider" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/grantPermissionsButton"
+                    style="@style/ActionRow"
+                    android:text="Grant Echo VR Permissions"
+                    android:drawableStart="@drawable/ic_shield"
+                    android:visibility="gone" />
+
+            </LinearLayout>
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <LinearLayout
+                android:layout_width="300dp"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginBottom="10dp">
+
+                <LinearLayout
+                    android:id="@+id/clearCacheButtonMain"
+                    style="@style/UtilButton">
+                    <ImageView style="@style/UtilButtonIcon" android:src="@drawable/ic_trash" />
+                    <TextView style="@style/UtilButtonLabel" android:text="CACHE" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/checkUpdatesButtonMain"
+                    style="@style/UtilButton">
+                    <ImageView style="@style/UtilButtonIcon" android:src="@drawable/ic_refresh" />
+                    <TextView style="@style/UtilButtonLabel" android:text="APP UPDATE" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/settingsButtonMain"
+                    style="@style/UtilButton">
+                    <ImageView style="@style/UtilButtonIcon" android:src="@drawable/ic_settings" />
+                    <TextView style="@style/UtilButtonLabel" android:text="SETTINGS" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/helpButtonMain"
+                    style="@style/UtilButton">
+                    <ImageView style="@style/UtilButtonIcon" android:src="@drawable/ic_help" />
+                    <TextView style="@style/UtilButtonLabel" android:text="HELP" />
+                </LinearLayout>
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/viewLobbyLinkButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Uninstall Echo VR"
+                android:textColor="@color/echo_danger"
+                android:textSize="13sp"
+                android:padding="10dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?attr/selectableItemBackground"
+                android:visibility="gone"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:text="Installer by he_is_the_cat"
+                android:textColor="@color/echo_text_faint"
+                android:layout_marginTop="4dp" />
+
+            <TextView
+                android:id="@+id/versionTextMain"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:textSize="10sp"
+                android:textColor="@color/echo_text_faint"
                 android:layout_marginTop="2dp" />
 
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="280dp"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="@drawable/status_card_background"
-            android:padding="15dp"
-            android:layout_marginBottom="12dp">
-
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="INSTALLATION STATUS"
-                android:textColor="#e3f2fd"
+                android:fontFamily="monospace"
                 android:textSize="10sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="5dp" />
-
-            <TextView
-                android:id="@+id/statusText"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Checking installation..."
-                android:textColor="#ffffff"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:gravity="center"
-                android:minHeight="40dp" />
+                android:text="Total Size: 894MB"
+                android:textColor="@color/echo_text_faint"
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="8dp" />
 
         </LinearLayout>
-
-        <Button
-            android:id="@+id/downloadButton"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:text="DOWNLOAD GAME DATA (894MB)"
-            android:textColor="#ffffff"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:background="@drawable/download_button_background"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/reinstallButton"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:text="REINSTALL GAME DATA"
-            android:textColor="#ffffff"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:background="@drawable/download_button_background"
-            android:visibility="gone"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/checkGameUpdatesButton"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:text="CHECK ECHO UPDATES"
-            android:textColor="#ffffff"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:background="@drawable/download_button_background"
-            android:visibility="gone"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/grantPermissionsButton"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:text="GRANT ECHO VR PERMISSIONS"
-            android:textColor="#ffffff"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:background="@drawable/permission_button_background"
-            android:visibility="gone"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/launchEchoVRButton"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:text="LAUNCH ECHO VR"
-            android:textColor="#ffffff"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:background="@drawable/launch_button_background"
-            android:visibility="gone"
-            android:layout_marginBottom="10dp" />
-
-        <Button
-            android:id="@+id/viewLobbyLinkButton"
-            android:layout_width="280dp"
-            android:layout_height="45dp"
-            android:text="UNINSTALL ECHO VR"
-            android:textColor="#FFFFFF"
-            android:textSize="12sp"
-            android:textStyle="bold"
-            android:background="@drawable/uninstall_button_background"
-            app:backgroundTint="@null"
-            android:visibility="gone"
-            android:layout_marginBottom="10dp" />
-
-        <LinearLayout
-            android:layout_width="300dp"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:layout_marginBottom="4dp">
-
-            <Button
-                android:id="@+id/clearCacheButtonMain"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="0.9"
-                android:text="CLEAR CACHE"
-                android:textColor="#ffcc80"
-                android:textSize="9.2sp"
-                android:textStyle="bold"
-                android:background="@drawable/utility_button_background"
-                android:layout_marginEnd="5dp" />
-
-            <Button
-                android:id="@+id/checkUpdatesButtonMain"
-                android:layout_width="0dp"
-                android:layout_height="40dp"
-                android:layout_weight="1"
-                android:text="CHECK UPDATES"
-                android:textColor="#c8e6c9"
-                android:textSize="9.1sp"
-                android:textStyle="bold"
-                android:background="@drawable/utility_button_background"
-                android:layout_marginEnd="5dp" />
-
-            <Button
-                android:id="@+id/helpButtonMain"
-                android:layout_width="50dp"
-                android:layout_height="45dp"
-                android:text="❓"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                android:background="@drawable/help_button_background"
-                android:gravity="center" />
-
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Installer was made by he_is_the_cat"
-            android:textColor="#bb86fc"
-            android:textSize="11sp"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp" />
-
-        <TextView
-            android:id="@+id/versionTextMain"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#bbdefb"
-            android:textSize="10sp"
-            android:layout_marginTop="4dp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Total Size: 894MB"
-            android:textColor="#bbdefb"
-            android:textSize="10sp"
-            android:layout_marginTop="4dp" />
-
-    </LinearLayout>
+    </ScrollView>
 
 </RelativeLayout>

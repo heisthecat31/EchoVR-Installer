@@ -37,24 +37,28 @@ import androidx.core.app.ActivityCompat;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class MainActivity extends AppCompatActivity implements InstallerManager.Listener {
+public class MainActivity extends AppCompatActivity implements InstallerManager.Listener, DiscordAuth.Callback, TesterBundleInstaller.Listener {
 
     private InstallerManager manager;
     private UpdateManager updateManager;
+    private DiscordAuth discordAuth;
+    private TesterBundleInstaller testerInstaller;
     private SharedPreferences prefs;
 
     // UI Elements
-    private LinearLayout gameSelectionLayout, mainContentLayout;
+    private View gameSelectionLayout, mainContentLayout;
     private TextView statusText;
-    private Button downloadButton, reinstallButton, checkGameUpdatesButton, grantPermissionsButton, launchEchoVRButton, uninstallEchoVRButton;
-    private Button helpButtonGame, helpButtonMain;
+    private Button downloadButton, reinstallButton, checkGameUpdatesButton, grantPermissionsButton, launchEchoVRButton;
+    private View uninstallEchoVRButton;
+    private View helpButtonGame, helpButtonMain;
     private AlertDialog progressDialog;
 
     private static final String PREFS_NAME = "EchoVRInstallerPrefs";
     private static final String PREF_PERMISSION_POPUP_SHOWN = "permission_popup_shown";
+    /** The Quest dev folder code (dash stripped) - also what unlocks Developer Settings. */
+    private static final String PREF_DEV_CODE = "dev_folder_code";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
-    private static final String DISCORD_INVITE_URL = "https://discord.gg/KQ8qGPKQeF";
-    private static final String CURRENT_VERSION = "4.3";
+    private static final String CURRENT_VERSION = "4.5";
     private boolean justInstalledEchoVr = false;
     private boolean hasCheckedForModUpdates = false;
 
@@ -82,6 +86,8 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         manager = new InstallerManager(this, this);
         updateManager = new UpdateManager(this, this);
+        discordAuth = new DiscordAuth(this, this);
+        testerInstaller = new TesterBundleInstaller(this, this);
         manager.fetchRemoteConfig();
         manager.checkForUpdates(CURRENT_VERSION, true);
 
@@ -111,12 +117,9 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         grantPermissionsButton = findViewById(R.id.grantPermissionsButton);
         launchEchoVRButton = findViewById(R.id.launchEchoVRButton);
         uninstallEchoVRButton = findViewById(R.id.viewLobbyLinkButton);
-        uninstallEchoVRButton.setText("UNINSTALL ECHO VR");
 
         // Options
-        findViewById(R.id.legacyOption).setOnClickListener(v -> showLegacyWarningDialog());
         findViewById(R.id.newPlayerOption).setOnClickListener(v -> showNewPlayerDialog());
-
 
         // Actions
         downloadButton.setOnClickListener(v -> manager.installGameData());
@@ -137,13 +140,13 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         View.OnClickListener clearCache = v -> showConfirmDialog("Clear Cache", "Delete temporary files? This does not affect installed game data.", () -> manager.clearCache());
         View.OnClickListener checkUpdates = v -> manager.checkForUpdates(CURRENT_VERSION);
 
-        Button clearCacheButtonGame = findViewById(R.id.clearCacheButtonGame);
-        Button clearCacheButtonMain = findViewById(R.id.clearCacheButtonMain);
+        View clearCacheButtonGame = findViewById(R.id.clearCacheButtonGame);
+        View clearCacheButtonMain = findViewById(R.id.clearCacheButtonMain);
         clearCacheButtonGame.setOnClickListener(clearCache);
         clearCacheButtonMain.setOnClickListener(clearCache);
 
-        Button checkUpdatesButtonGame = findViewById(R.id.checkUpdatesButtonGame);
-        Button checkUpdatesButtonMain = findViewById(R.id.checkUpdatesButtonMain);
+        View checkUpdatesButtonGame = findViewById(R.id.checkUpdatesButtonGame);
+        View checkUpdatesButtonMain = findViewById(R.id.checkUpdatesButtonMain);
         checkUpdatesButtonGame.setOnClickListener(checkUpdates);
         checkUpdatesButtonMain.setOnClickListener(checkUpdates);
 
@@ -152,8 +155,142 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         View.OnClickListener help = v -> showHelpDialog();
         helpButtonGame.setOnClickListener(help);
         helpButtonMain.setOnClickListener(help);
+
+        View settingsButtonGame = findViewById(R.id.settingsButtonGame);
+        View settingsButtonMain = findViewById(R.id.settingsButtonMain);
+        View.OnClickListener settings = v -> showSettingsDialog();
+        settingsButtonGame.setOnClickListener(settings);
+        settingsButtonMain.setOnClickListener(settings);
     }
-    
+
+    private void showSettingsDialog() {
+        if (prefs.getString(PREF_DEV_CODE, null) != null) {
+            startTesterBundleFlow();
+            return;
+        }
+
+        EditText codeInput = new EditText(this);
+        codeInput.setHint("Developer code (xxxxx-xxxxx)");
+        codeInput.setTextColor(Color.WHITE);
+        codeInput.setHintTextColor(Color.parseColor("#888888"));
+        codeInput.setBackground(getResources().getDrawable(R.drawable.edit_text_background));
+        codeInput.setPadding(25, 20, 25, 20);
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(50, 30, 50, 10);
+        layout.addView(codeInput);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Developer Settings")
+                .setView(layout)
+                .setPositiveButton("Submit", (d, w) -> {
+                    String code = TesterBundleInstaller.normalizeDevCode(codeInput.getText().toString());
+                    if (code == null) {
+                        Toast.makeText(this, "Invalid code", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    showProgressDialog("Checking code...", false);
+                    testerInstaller.verifyDevCode(code, (ok, error) -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        dismissProgressDialog();
+                        if (ok) {
+                            prefs.edit().putString(PREF_DEV_CODE, code).apply();
+                            startTesterBundleFlow();
+                        } else if (error == null) {
+                            Toast.makeText(this, "Invalid code", Toast.LENGTH_SHORT).show();
+                        } else {
+                            new AlertDialog.Builder(this).setTitle("Error").setMessage(error).setPositiveButton("OK", null).show();
+                        }
+                    });
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    // --- Tester bundle (dev code) install flow ---
+
+    private void startTesterBundleFlow() {
+        new AlertDialog.Builder(this)
+                .setTitle("Install Test Build")
+                .setMessage("This downloads the tester bundle and installs a side-by-side \"Echo VR (afk)\" test app, " +
+                        "signed with a key kept only on this headset, and copies stock Echo VR's base data into it.\n\n" +
+                        "Stock Echo VR must already be installed and have been launched once to its main menu.")
+                .setPositiveButton("Continue", (d, w) -> promptDisplayNameForTesterBundle())
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("Change Code", (d, w) -> {
+                    prefs.edit().remove(PREF_DEV_CODE).apply();
+                    showSettingsDialog();
+                })
+                .show();
+    }
+
+    private void promptDisplayNameForTesterBundle() {
+        String existing = testerInstaller.peekExistingDisplayName();
+
+        EditText nameInput = new EditText(this);
+        nameInput.setHint("Display name (1-20 characters)");
+        nameInput.setTextColor(Color.WHITE);
+        nameInput.setHintTextColor(Color.parseColor("#888888"));
+        nameInput.setBackground(getResources().getDrawable(R.drawable.edit_text_background));
+        nameInput.setPadding(25, 20, 25, 20);
+        if (existing != null) nameInput.setText(existing);
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(50, 30, 50, 10);
+        layout.addView(nameInput);
+
+        new AlertDialog.Builder(this)
+                .setTitle(existing != null ? "Display name (currently " + existing + ")" : "Choose a display name")
+                .setView(layout)
+                .setPositiveButton("Install", (d, w) -> {
+                    String name = nameInput.getText().toString().trim();
+                    if (name.isEmpty()) {
+                        Toast.makeText(this, "Enter a display name", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    showProgressDialog("Starting...", false);
+                    testerInstaller.downloadAndInstall(prefs.getString(PREF_DEV_CODE, null), name);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    @Override
+    public void onProgress(String message) {
+        if (isFinishing() || isDestroyed()) return;
+        if (progressDialog == null || !progressDialog.isShowing()) {
+            showProgressDialog(message, false);
+        }
+        TextView text = progressDialog.findViewById(R.id.dialogProgressText);
+        if (text != null) text.setText(message);
+    }
+
+    @Override
+    public void onNeedUninstallConfirm(Runnable proceed, Runnable cancel) {
+        if (isFinishing() || isDestroyed()) {
+            // No UI left to ask through - don't leave the background flow hanging forever waiting
+            // for a tap that can never come, but also don't uninstall anything without someone
+            // having actually confirmed it.
+            cancel.run();
+            return;
+        }
+        dismissProgressDialog();
+        new AlertDialog.Builder(this)
+                .setTitle("Replace Existing Test Build?")
+                .setMessage("The test build already on this headset is signed with a different key and can't be " +
+                        "updated in place. Uninstalling it removes its files; this installer puts them back " +
+                        "afterwards (base data, pack, switches, and your name).\n\nUninstall the old test build and continue?")
+                .setPositiveButton("Uninstall & Continue", (d, w) -> {
+                    showProgressDialog("Uninstalling old test build...", false);
+                    proceed.run();
+                })
+                .setNegativeButton("Cancel", (d, w) -> cancel.run())
+                .setCancelable(false)
+                .show();
+    }
+
     // --- DIALOGS ---
 
     private void checkState() {
@@ -166,12 +303,9 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
             helpButtonMain.setVisibility(View.VISIBLE);
 
             if (manager.verifyDataInstallation()) {
-                String date = prefs.getString("installation_date", "");
-                String msg = "Game data installed";
-                if (!date.isEmpty()) msg += "\nInstalled: " + date;
-
-                statusText.setText(msg);
-                statusText.setTextColor(Color.GREEN);
+                statusText.setText("●  Ready to play");
+                statusText.setTextColor(getColor(R.color.echo_good));
+                statusText.setBackgroundResource(R.drawable.chip_good_background);
                 downloadButton.setVisibility(View.GONE);
                 reinstallButton.setVisibility(View.VISIBLE);
                 checkGameUpdatesButton.setVisibility(View.VISIBLE);
@@ -184,8 +318,9 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
                     ModPatchService.start(this);
                 }
             } else {
-                statusText.setText("Game data missing");
-                statusText.setTextColor(Color.parseColor("#ff9800"));
+                statusText.setText("●  Game data missing");
+                statusText.setTextColor(getColor(R.color.echo_warn));
+                statusText.setBackgroundResource(R.drawable.chip_warn_background);
                 downloadButton.setVisibility(View.VISIBLE);
                 reinstallButton.setVisibility(View.GONE);
                 checkGameUpdatesButton.setVisibility(View.GONE);
@@ -232,6 +367,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
     @Override
     public void onSuccess(String message) {
+        if (isFinishing() || isDestroyed()) return;
         dismissProgressDialog();
         checkState();
         new AlertDialog.Builder(this).setTitle("Success").setMessage(message).setPositiveButton("OK", null).show();
@@ -239,6 +375,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
     @Override
     public void onError(String message) {
+        if (isFinishing() || isDestroyed()) return;
         dismissProgressDialog();
         checkState();
         new AlertDialog.Builder(this).setTitle("Error").setMessage(message).setPositiveButton("OK", null).show();
@@ -374,19 +511,31 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
 
     private void showProgressDialog(String message) {
+        showProgressDialog(message, true);
+    }
+
+    /**
+     * @param cancelable whether to offer a Cancel button wired to the download-based managers'
+     *                    own cancel() methods - wrong to show for a flow those managers aren't
+     *                    actually running (e.g. the tester bundle install), since tapping it
+     *                    would dismiss the dialog without actually stopping anything.
+     */
+    private void showProgressDialog(String message, boolean cancelable) {
         runOnUiThread(() -> {
             if (progressDialog != null && progressDialog.isShowing()) return;
             View view = getLayoutInflater().inflate(R.layout.dialog_progress, null);
             TextView txt = view.findViewById(R.id.dialogProgressText);
             txt.setText(message);
-            progressDialog = new AlertDialog.Builder(this)
-                    .setView(view)
-                    .setCancelable(false)
-                    .setNegativeButton("Cancel", (d, w) -> {
-                        manager.cancelCurrentTask();
-                        updateManager.cancel();
-                    })
-                    .create();
+            AlertDialog.Builder builder = new AlertDialog.Builder(this).setView(view).setCancelable(false);
+            if (cancelable) {
+                builder.setNegativeButton("Cancel", (d, w) -> {
+                    manager.cancelCurrentTask();
+                    updateManager.cancel();
+                    discordAuth.cancel();
+                    DiscordAuthKeepAliveService.stop(this);
+                });
+            }
+            progressDialog = builder.create();
             progressDialog.show();
         });
     }
@@ -399,24 +548,44 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
     private void showNewPlayerDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Custom APK Installation");
+        builder.setTitle("New Player Installation");
 
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
         mainLayout.setPadding(50, 40, 50, 30);
-        mainLayout.setBackgroundColor(Color.parseColor("#1a1a1a"));
+        mainLayout.setBackgroundColor(Color.parseColor("#FF111928"));
 
         TextView instruction = new TextView(this);
-        instruction.setText("Enter APK download URL:");
-        instruction.setTextColor(Color.WHITE);
-        instruction.setTextSize(16);
-        instruction.setTypeface(null, Typeface.BOLD);
+        instruction.setText("Sign in with Discord to get your personal Echo VR APK. It downloads and installs automatically.\n\nYou need to be a member of the Echo VR Patcher Discord server.");
+        instruction.setTextColor(Color.parseColor("#EEF3F8"));
+        instruction.setTextSize(14);
         instruction.setGravity(Gravity.CENTER);
-        instruction.setPadding(0, 0, 0, 20);
+        instruction.setPadding(0, 0, 0, 25);
         mainLayout.addView(instruction);
 
+        Button signInBtn = dialogButton("SIGN IN WITH DISCORD", R.drawable.button_background);
+        mainLayout.addView(signInBtn);
+
+        Button joinBtn = dialogButton("JOIN PATCHER SERVER", R.drawable.button_background_secondary);
+        mainLayout.addView(joinBtn);
+        joinBtn.setOnClickListener(v -> openUrl(DiscordAuth.PATCHER_INVITE));
+
+        // Fallback for someone who already has a patched APK link (e.g. from the bot directly).
+        TextView haveLink = new TextView(this);
+        haveLink.setText("I already have an APK link");
+        haveLink.setTextColor(Color.parseColor("#3FD4FF"));
+        haveLink.setTextSize(13);
+        haveLink.setGravity(Gravity.CENTER);
+        haveLink.setPadding(0, 5, 0, 15);
+        mainLayout.addView(haveLink);
+
+        LinearLayout linkLayout = new LinearLayout(this);
+        linkLayout.setOrientation(LinearLayout.VERTICAL);
+        linkLayout.setVisibility(View.GONE);
+        mainLayout.addView(linkLayout);
+
         EditText apkUrlInput = new EditText(this);
-        apkUrlInput.setHint("https://example.com/echo_vr.apk");
+        apkUrlInput.setHint("https://files.echovr.de/...apk");
         apkUrlInput.setTextColor(Color.WHITE);
         apkUrlInput.setHintTextColor(Color.parseColor("#888888"));
         apkUrlInput.setBackground(getResources().getDrawable(R.drawable.edit_text_background));
@@ -424,69 +593,34 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         apkUrlInput.setTextSize(14);
         LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        inputParams.setMargins(0, 0, 0, 25);
+        inputParams.setMargins(0, 0, 0, 15);
         apkUrlInput.setLayoutParams(inputParams);
-        mainLayout.addView(apkUrlInput);
+        linkLayout.addView(apkUrlInput);
 
-        Button discordButton = new Button(this);
-        discordButton.setText("GET APK FROM DISCORD");
-        discordButton.setTextColor(Color.WHITE);
-        discordButton.setBackground(getResources().getDrawable(R.drawable.button_background));
-        discordButton.setPadding(40, 15, 40, 15);
-        discordButton.setTextSize(14);
-        discordButton.setTypeface(null, Typeface.BOLD);
-        LinearLayout.LayoutParams discordButtonParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        discordButtonParams.setMargins(0, 0, 0, 25);
-        discordButton.setLayoutParams(discordButtonParams);
-        mainLayout.addView(discordButton);
+        Button installLinkBtn = dialogButton("INSTALL FROM LINK", R.drawable.button_background);
+        linkLayout.addView(installLinkBtn);
 
-        discordButton.setOnClickListener(v -> {
-            try {
-                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(DISCORD_INVITE_URL)));
-            } catch (Exception e) {
-                Toast.makeText(MainActivity.this, "Cannot open link", Toast.LENGTH_SHORT).show();
-            }
+        haveLink.setOnClickListener(v -> {
+            haveLink.setVisibility(View.GONE);
+            linkLayout.setVisibility(View.VISIBLE);
         });
 
-        LinearLayout buttonLayout = new LinearLayout(this);
-        buttonLayout.setOrientation(LinearLayout.HORIZONTAL);
-        buttonLayout.setGravity(Gravity.CENTER);
-
-        Button cancelBtn = new Button(this);
-        cancelBtn.setText("CANCEL");
-        cancelBtn.setTextColor(Color.WHITE);
-        cancelBtn.setBackground(getResources().getDrawable(R.drawable.button_background_secondary));
-        cancelBtn.setPadding(40, 15, 40, 15);
-        cancelBtn.setTextSize(14);
-        cancelBtn.setTypeface(null, Typeface.BOLD);
-        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        cancelParams.setMargins(0, 0, 10, 0);
-        cancelBtn.setLayoutParams(cancelParams);
-
-        Button installBtn = new Button(this);
-        installBtn.setText("INSTALL");
-        installBtn.setTextColor(Color.WHITE);
-        installBtn.setBackground(getResources().getDrawable(R.drawable.button_background));
-        installBtn.setPadding(40, 15, 40, 15);
-        installBtn.setTextSize(14);
-        installBtn.setTypeface(null, Typeface.BOLD);
-        LinearLayout.LayoutParams installParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        installParams.setMargins(10, 0, 0, 0);
-        installBtn.setLayoutParams(installParams);
-
-        buttonLayout.addView(cancelBtn);
-        buttonLayout.addView(installBtn);
-        mainLayout.addView(buttonLayout);
+        Button cancelBtn = dialogButton("CANCEL", R.drawable.button_background_secondary);
+        mainLayout.addView(cancelBtn);
 
         builder.setView(mainLayout);
         AlertDialog dialog = builder.create();
         dialog.getWindow().setBackgroundDrawableResource(R.drawable.dialog_background);
 
         cancelBtn.setOnClickListener(v -> dialog.dismiss());
-        installBtn.setOnClickListener(v -> {
-            String inputText = apkUrlInput.getText().toString().trim();
-            String extractedUrl = extractUrl(inputText);
+        signInBtn.setOnClickListener(v -> {
+            dialog.dismiss();
+            onTaskStarted();
+            DiscordAuthKeepAliveService.start(this);
+            discordAuth.start();
+        });
+        installLinkBtn.setOnClickListener(v -> {
+            String extractedUrl = extractUrl(apkUrlInput.getText().toString().trim());
             if (extractedUrl != null && extractedUrl.startsWith("http")) {
                 dialog.dismiss();
                 manager.installCustomApk(extractedUrl);
@@ -495,6 +629,55 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
             }
         });
         dialog.show();
+    }
+
+    private Button dialogButton(String label, int backgroundRes) {
+        Button button = new Button(this);
+        button.setText(label);
+        button.setTextColor(Color.parseColor("#EEF3F8"));
+        button.setBackground(getResources().getDrawable(backgroundRes));
+        button.setPadding(40, 20, 40, 20);
+        button.setTextSize(14);
+        button.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, 0, 0, 15);
+        button.setLayoutParams(params);
+        return button;
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception e) {
+            Toast.makeText(this, "Cannot open link", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // --- DiscordAuth Callbacks ---
+
+    @Override
+    public void onStatus(String message) {
+        onProgress(-1, message);
+    }
+
+    @Override
+    public void onPatchUrl(String patchUrl) {
+        DiscordAuthKeepAliveService.stop(this);
+        dismissProgressDialog();
+        manager.installCustomApk(patchUrl);
+    }
+
+    @Override
+    public void onError(String title, String message, String joinUrl) {
+        DiscordAuthKeepAliveService.stop(this);
+        onTaskFinished();
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
+                .setTitle(title)
+                .setMessage(message)
+                .setPositiveButton("OK", null);
+        if (joinUrl != null) builder.setNeutralButton("JOIN SERVER", (d, w) -> openUrl(joinUrl));
+        builder.show();
     }
 
     private void showHelpDialog() {
@@ -537,15 +720,6 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
                 .setCancelable(false)
                 .show();
         prefs.edit().putBoolean(PREF_PERMISSION_POPUP_SHOWN, true).apply();
-    }
-
-    private void showLegacyWarningDialog() {
-        new AlertDialog.Builder(this)
-                .setTitle("Warning")
-                .setMessage("Warning, this option is only for people who owned echo vr before shutdown and may not work all the time, it is recommended to use new player option when installing")
-                .setPositiveButton("Continue", (d, w) -> manager.installLegacyEchoVr())
-                .setNegativeButton("Cancel", null)
-                .show();
     }
 
     private void openAppPermissions() {
@@ -643,7 +817,10 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     @Override
     protected void onDestroy() {
         resumePollHandler.removeCallbacksAndMessages(null);
+        discordAuth.cancel();
+        DiscordAuthKeepAliveService.stop(this);
         manager.shutdown();
+        testerInstaller.shutdown();
         super.onDestroy();
     }
 }
