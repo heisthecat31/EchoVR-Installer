@@ -108,7 +108,7 @@ public class TesterBundleInstaller {
             + "then run this again (it copies the stock base data into the test app's folder).";
 
     private static final Pattern SWITCH = Pattern.compile("[A-Za-z0-9_.-]+\\.(on|off|req|poses|done)");
-    private static final Pattern ON_NAME = Pattern.compile("[A-Za-z0-9_-]+\\.on");
+    private static final Pattern ON_NAME = Pattern.compile("[A-Za-z0-9_-]+\\.(on|off)");
 
     private static final String SIGNING_KEY_ALIAS = "echo_tester_signing_key";
     private static final long REQUIRED_SPACE_BYTES = 1536L * 1024 * 1024;
@@ -188,11 +188,17 @@ public class TesterBundleInstaller {
             progress("Checking stock Echo VR data...");
             java.util.Map<String, Long> stockSizes = checkStockBaseFiles(bundle);
 
+            // Read before anything is installed: an uninstall (signature conflict) wipes the test app's media
+            // folder, and a same-name reinstall must keep its player id + password (tester_install.py AUD-9 TI-5).
+            UserIdentity oldIdentity = readUser(new File(mediaDir(), SWITCHES_SUBPATH + "/" + USER_TXT_NAME));
+            String oldPassword = readPassword(new File(mediaDir(), CONFIG_JSON_NAME));
+
             progress("Preparing signing key...");
             File signedApk = new File(workDir, "signed.apk");
             signApk(new File(bundleDir, bundle.apkRelPath), signedApk);
 
-            installOrUpdateApk(signedApk, workDir, () -> finishAfterInstall(bundleDir, bundle, stockSizes, displayName, workDir));
+            installOrUpdateApk(signedApk, workDir, () -> finishAfterInstall(bundleDir, bundle, stockSizes, displayName,
+                    oldIdentity, oldPassword, workDir));
         } catch (Exception e) {
             Log.e(TAG, "Tester bundle install failed", e);
             fail(e.getMessage() != null ? e.getMessage() : e.toString());
@@ -201,7 +207,7 @@ public class TesterBundleInstaller {
     }
 
     private void finishAfterInstall(File bundleDir, TesterBundle bundle, java.util.Map<String, Long> stockSizes,
-                                     String displayName, File workDir) {
+                                     String displayName, UserIdentity oldIdentity, String oldPassword, File workDir) {
         try {
             progress("Copying stock base data...");
             baseCopy(bundle, stockSizes);
@@ -213,7 +219,7 @@ public class TesterBundleInstaller {
             reconcileSwitches(bundle);
 
             progress("Saving your identity...");
-            String name = writeIdentity(bundle, displayName);
+            String name = writeIdentity(bundle, displayName, oldIdentity, oldPassword);
 
             succeed("Done. Launch \"Echo VR (afk)\" from Library > Unknown Sources.\nServer " + bundle.server
                     + ", you are " + name + ".");
@@ -423,7 +429,7 @@ public class TesterBundleInstaller {
         if (!bad.isEmpty()) throw new Exception("Bundle files missing or changed (sha256): " + bad);
 
         for (String name : bundle.on) {
-            if (!ON_NAME.matcher(name).matches()) throw new Exception("Bundle's \"on\" list is not plain .on names: " + name);
+            if (!ON_NAME.matcher(name).matches()) throw new Exception("Bundle's \"on\" list is not plain .on/.off names: " + name);
         }
         return bundle;
     }
@@ -712,7 +718,7 @@ public class TesterBundleInstaller {
 
     private static final int NAME_MAX = 20;
 
-    private String writeIdentity(TesterBundle bundle, String requestedName) throws Exception {
+    private String writeIdentity(TesterBundle bundle, String requestedName, UserIdentity old, String oldPassword) throws Exception {
         File afkDir = new File(mediaDir(), SWITCHES_SUBPATH);
         File userTxt = new File(afkDir, USER_TXT_NAME);
         File configJson = new File(mediaDir(), CONFIG_JSON_NAME);
@@ -720,10 +726,9 @@ public class TesterBundleInstaller {
         String name = cleanName(requestedName);
         if (name.isEmpty()) throw new Exception("The display name has no printable characters");
 
-        UserIdentity old = readUser(userTxt);
         boolean same = old.id != null && name.equals(old.name);
         long id = same ? old.id : newId();
-        String password = same ? readPassword(configJson) : null;
+        String password = same ? oldPassword : null;
         if (password == null) password = newPassword();
 
         writeFile(userTxt, "id=" + id + "\nname=" + name + "\n");

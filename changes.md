@@ -104,3 +104,9 @@ Also checked a reference project for this same bot/community (github.com/Crafter
 - Developer Settings is unlocked by the dev folder code itself (typed in, dash optional, verified against the folder, kept in prefs) instead of the hardcoded `1509-1188`. The code is never in source, since the repo and APK are public. Added a "Change Code" button.
 - To ship a new bundle: upload the new zip under a new name into `files/`, then overwrite `files/tester.json`, then delete the old zip.
 - Verified: `gradlew assembleDebug` succeeds; public download's SHA-256 matches; a wrong code gets 404. Not tested on a headset.
+
+### Follow-up 11 (4.6): support the v6 combat test build
+
+- The v6 tester bundle (build `35fd246596`) lists `wallfire.off` in its switch list. Its own `tester_install.py` now accepts `.on` and `.off` names there; `TesterBundleInstaller` only accepted `.on` and would have refused the whole bundle. Now matches (`[A-Za-z0-9_-]+\.(on|off)`).
+- Ported the same script's AUD-9 TI-5 fix: the tester's `user.txt` id and `config.json` password are read *before* the install, not after. A signature-conflict uninstall wipes the test app's media folder, so reading afterwards gave a same-name reinstall a brand-new player id.
+- Bumped to 4.6 (versionCode 46).
