@@ -86,11 +86,14 @@ public class TesterBundleInstaller {
     }
 
     /**
-     * The developer's Quest dev folder on release.echovr.de. It can't be listed and only answers exact
-     * file URLs, so the 10-character dev code in the path is what gates access - it is typed in by the
+     * The developer's Quest dev folder (path under the CDN / release hosts). It can't be listed and only answers
+     * exact file URLs, so the 10-character dev code in the path is what gates access - it is typed in by the
      * tester and kept in prefs, never written into this (public) source.
      */
-    private static final String DEV_FOLDER_BASE = "https://release.echovr.de/quest/launcher/dev/";
+    private static final String DEV_FOLDER_PATH = "quest/launcher/dev/";
+    private static final String CDN_HOST = "https://cdn.echovr.de/";
+    /** Origin behind the CDN; uploads take ~3 min to reach the CDN, so it is the fallback for fresh files. */
+    private static final String RELEASE_HOST = "https://release.echovr.de/";
     /** Pointer file in the dev folder naming the current bundle zip, so swapping builds needs no app release. */
     private static final String POINTER_PATH = "files/tester.json";
     private static final Pattern DEV_CODE = Pattern.compile("[a-z0-9]{10}");
@@ -245,26 +248,28 @@ public class TesterBundleInstaller {
         long size;
     }
 
-    private static String devFileUrl(String devCode, String path) {
-        return DEV_FOLDER_BASE + devCode + "/" + path;
+    private static String devPath(String devCode, String path) {
+        return DEV_FOLDER_PATH + devCode + "/" + path;
+    }
+
+    private static String storePath(String sha256) {
+        return "store/sha256/" + sha256.substring(0, 2) + "/" + sha256;
     }
 
     private Pointer fetchPointer(String devCode) throws Exception {
         if (devCode == null || !DEV_CODE.matcher(devCode).matches()) throw new InvalidCodeException();
-        HttpURLConnection conn = (HttpURLConnection) new URL(devFileUrl(devCode, POINTER_PATH)).openConnection();
-        String body;
-        try {
-            conn.setRequestProperty("User-Agent", "EchoVR-Installer");
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(15000);
-            int code = conn.getResponseCode();
-            if (code == 404 || code == 403) throw new InvalidCodeException();
-            if (code == 429) throw new Exception("The test build server is busy. Wait a few seconds and try again.");
-            if (code != HttpURLConnection.HTTP_OK) throw new Exception("HTTP " + code + " checking for the test build");
-            body = readLimited(conn.getInputStream(), 65536);
-        } finally {
-            conn.disconnect();
+        String body = null;
+        Exception last = null;
+        // The release host goes last, so its answer (the origin's) is the error reported when both fail.
+        for (String host : new String[]{CDN_HOST, RELEASE_HOST}) {
+            try {
+                body = fetchPointerBody(host + devPath(devCode, POINTER_PATH));
+                break;
+            } catch (Exception e) {
+                last = e;
+            }
         }
+        if (body == null) throw last;
 
         JSONObject json = new JSONObject(body);
         Pointer p = new Pointer();
@@ -275,6 +280,22 @@ public class TesterBundleInstaller {
             throw new Exception("The test build folder's tester.json is malformed.");
         }
         return p;
+    }
+
+    private String fetchPointerBody(String url) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            conn.setRequestProperty("User-Agent", "EchoVR-Installer");
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
+            int code = conn.getResponseCode();
+            if (code == 404 || code == 403) throw new InvalidCodeException();
+            if (code == 429) throw new Exception("The test build server is busy. Wait a few seconds and try again.");
+            if (code != HttpURLConnection.HTTP_OK) throw new Exception("HTTP " + code + " checking for the test build");
+            return readLimited(conn.getInputStream(), 65536);
+        } finally {
+            conn.disconnect();
+        }
     }
 
     private File downloadBundle(String devCode, Pointer pointer) throws Exception {
@@ -288,19 +309,36 @@ public class TesterBundleInstaller {
             for (File f : old) if (f.isFile() && !f.getName().equals(dest.getName())) f.delete();
         }
 
-        downloadWithProgress(devFileUrl(devCode, "files/" + pointer.bundle), dest, "test bundle");
-
-        if (pointer.size > 0 && dest.length() != pointer.size) {
-            dest.delete();
-            throw new Exception("The test bundle download is incomplete. Try again.");
+        String[] sources = {
+                CDN_HOST + storePath(pointer.sha256),
+                RELEASE_HOST + storePath(pointer.sha256),
+                RELEASE_HOST + devPath(devCode, "files/" + pointer.bundle),
+        };
+        Exception last = null;
+        for (String url : sources) {
+            try {
+                // A partial file left by a failed source is resumed from the next one: every source serves the same bytes.
+                downloadWithProgress(url, dest, "test bundle");
+            } catch (Exception e) {
+                Log.w(TAG, "Bundle download from " + url + " failed", e);
+                last = e;
+                continue;
+            }
+            if (pointer.size > 0 && dest.length() != pointer.size) {
+                dest.delete();
+                last = new Exception("The test bundle download is incomplete. Try again.");
+                continue;
+            }
+            progress("Verifying download...");
+            String actual = FileUtil.calculateSHA256(dest);
+            if (actual == null || !actual.equalsIgnoreCase(pointer.sha256)) {
+                dest.delete();
+                last = new Exception("The test bundle download is corrupt (checksum mismatch). Try again.");
+                continue;
+            }
+            return dest;
         }
-        progress("Verifying download...");
-        String actual = FileUtil.calculateSHA256(dest);
-        if (actual == null || !actual.equalsIgnoreCase(pointer.sha256)) {
-            dest.delete();
-            throw new Exception("The test bundle download is corrupt (checksum mismatch). Try again.");
-        }
-        return dest;
+        throw last;
     }
 
     private static String readLimited(InputStream in, int maxBytes) throws IOException {

@@ -58,7 +58,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     /** The Quest dev folder code (dash stripped) - also what unlocks Developer Settings. */
     private static final String PREF_DEV_CODE = "dev_folder_code";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
-    private static final String CURRENT_VERSION = "4.6";
+    private static final String CURRENT_VERSION = "4.8";
     private boolean justInstalledEchoVr = false;
     private boolean hasCheckedForModUpdates = false;
 
