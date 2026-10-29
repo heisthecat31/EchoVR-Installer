@@ -42,7 +42,6 @@ public class InstallerManager {
         void onTaskFinished();
         void onUpdateAvailable(String version, String notes, String downloadUrl);
         void onUpdateNotAvailable();
-        void onBaseApkUpdateAvailable(UpdateManifest manifest);
     }
 
     private final Context context;
@@ -53,22 +52,11 @@ public class InstallerManager {
     private Future<?> currentTask;
     private boolean isTaskCancelled = false;
 
-    private static final String REMOTE_CONFIG_URL = "https://github.com/heisthecat31/EchoVR-Installer/releases/download/Installer/config.json";
-
-    public String dataUrl = "https://mia.cdn.echo.taxi/_data.zip";
-    public String enhancedGraphicsUrl = "https://mia.cdn.echo.taxi/questEchoTextureMod_Alpha_v0.1_06-10-25.apk";
-    public String backupDataUrl = "https://files.echovr.de/_data.zip";
-    public String backupEnhancedGraphicsUrl = "https://files.echovr.de/cat/questEchoTextureMod_Alpha_v0.1_06-10-25.apk";
-
-    public static final String INSTALLER_VERSION = "0.9.4b-006";
-
     private static final String GITHUB_RELEASES_URL = "https://api.github.com/repos/heisthecat31/EchoVR-Installer/releases/latest";
     private static final String TARGET_DIR = "Android/media/com.readyatdawn.r15/files";
     private static final String DATA_FOLDER = "_data";
     private static final String PREFS_NAME = "EchoVRInstallerPrefs";
     private static final String PREF_INSTALLATION_DATE = "installation_date";
-    private static final String PREF_CUSTOM_APK_URL = "custom_apk_url";
-    private static final long TOTAL_FILE_SIZE = 894L * 1024 * 1024;
     private static final long REQUIRED_SPACE_BYTES = 2500L * 1024 * 1024;
 
     public InstallerManager(Context context, Listener listener) {
@@ -87,126 +75,122 @@ public class InstallerManager {
         mainHandler.post(listener::onTaskFinished);
     }
 
-    public void fetchRemoteConfig() {
-        executorService.execute(() -> {
-            try {
-                URL url = new URL(REMOTE_CONFIG_URL);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
-                connection.setInstanceFollowRedirects(true);
-                
-                String etag = prefs.getString("config_etag", null);
-                String lastModified = prefs.getString("config_last_modified", null);
-                
-                if (etag != null) {
-                    connection.setRequestProperty("If-None-Match", etag);
-                }
-                if (lastModified != null) {
-                    connection.setRequestProperty("If-Modified-Since", lastModified);
-                }
-
-                int responseCode = connection.getResponseCode();
-                String jsonResponse;
-
-                if (responseCode == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                    jsonResponse = prefs.getString("config_json_data", "{}");
-                    Log.d("InstallerManager", "Using cached config.json");
-                } else if (responseCode == HttpURLConnection.HTTP_OK || responseCode == HttpURLConnection.HTTP_MOVED_TEMP) {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) response.append(line);
-                    reader.close();
-                    jsonResponse = response.toString();
-                    Log.d("InstallerManager", "Downloaded fresh config.json");
-
-                    String newEtag = connection.getHeaderField("ETag");
-                    String newLastModified = connection.getHeaderField("Last-Modified");
-                    
-                    SharedPreferences.Editor editor = prefs.edit();
-                    editor.putString("config_json_data", jsonResponse);
-                    if (newEtag != null) editor.putString("config_etag", newEtag);
-                    if (newLastModified != null) editor.putString("config_last_modified", newLastModified);
-                    editor.apply();
-                } else {
-                    jsonResponse = prefs.getString("config_json_data", "{}");
-                }
-
-                JSONObject config = new JSONObject(jsonResponse);
-                if (config.has("dataUrl")) dataUrl = config.getString("dataUrl");
-                if (config.has("enhancedUrl")) enhancedGraphicsUrl = config.getString("enhancedUrl");
-                if (config.has("backupDataUrl")) backupDataUrl = config.getString("backupDataUrl");
-                if (config.has("backupEnhancedUrl")) backupEnhancedGraphicsUrl = config.getString("backupEnhancedUrl");
-
-            } catch (Exception ignored) {
-                try {
-                    String cached = prefs.getString("config_json_data", null);
-                    if (cached != null) {
-                        JSONObject config = new JSONObject(cached);
-                        if (config.has("dataUrl")) dataUrl = config.getString("dataUrl");
-                        if (config.has("enhancedUrl")) enhancedGraphicsUrl = config.getString("enhancedUrl");
-                        if (config.has("backupDataUrl")) backupDataUrl = config.getString("backupDataUrl");
-                        if (config.has("backupEnhancedUrl")) backupEnhancedGraphicsUrl = config.getString("backupEnhancedUrl");
-                                    }
-                } catch (Exception e) {}
-            }
-        });
+    public interface NevrUpdateCallback {
+        void onNevrUpdateAvailable(NevrRuntime.Release release);
     }
 
-    public void installEnhancedGraphics() {
-        downloadAndInstallApkWithBackup(enhancedGraphicsUrl, backupEnhancedGraphicsUrl, "Enhanced Graphics", "echo_vr_enhanced.apk");
-    }
-
-    public void installCustomApk(String url) {
-        // downloadFile() resumes whatever is already on disk under this name, and a full file
-        // from a previous link answers the Range request with 416 and gets reused as-is - so a
-        // new link (every Discord sign-in gives a fresh personal one) must start from scratch.
-        String saveFileName = "echo_vr_custom.apk";
-        if (!url.equals(prefs.getString(PREF_CUSTOM_APK_URL, null))) {
-            File dir = context.getExternalFilesDir("apk");
-            if (dir != null) new File(dir, saveFileName).delete();
-            prefs.edit().putString(PREF_CUSTOM_APK_URL, url).apply();
-        }
-        startApkDownload(url, "Echo VR", false, null, saveFileName);
-    }
-
-    private void downloadAndInstallApkWithBackup(String primaryUrl, String backupUrl, String name, String saveFileName) {
-        startApkDownload(primaryUrl, name, true, backupUrl, saveFileName);
-    }
-
-    private void startApkDownload(String url, String name, boolean useBackup, String backupUrl, String saveFileName) {
+    /**
+     * Installs (or updates to) the latest NEVR runtime Echo VR APK from the release manifest.
+     * Every release is signed with the same key, so it installs over an earlier one in place.
+     */
+    public void installNevrRuntime() {
         if (!hasEnoughSpace()) return;
         isTaskCancelled = false;
-        mainHandler.post(listener::onTaskStarted);
+        mainHandler.post(() -> {
+            listener.onTaskStarted();
+            listener.onProgress(-1, "Checking for the latest Echo VR...");
+        });
 
         currentTask = executorService.submit(() -> {
-            File apkFile = downloadFile(url, "apk", saveFileName, name, false);
+            try {
+                NevrRuntime.Release release = NevrRuntime.fetchLatest(context);
 
-            if (apkFile == null && useBackup && !isTaskCancelled && backupUrl != null) {
-                mainHandler.post(() -> listener.onProgress(0, "First link failed, trying backup..."));
-                // Same reasoning as installGameData(): don't resume a partial file written by
-                // the primary host against a different backup host.
-                deleteStaleDownload("apk", saveFileName);
-                apkFile = downloadFile(backupUrl, "apk", saveFileName, name, true);
-            }
-
-            if (apkFile != null && !isTaskCancelled) {
-                File finalApk = apkFile;
-                mainHandler.post(() -> {
-                    listener.onTaskFinished();
-                    if (!isTaskCancelled && finalApk.exists()) {
-                        writeMarkerFile(finalApk, finalApk, FileUtil.INSTALL_SOURCE_CUSTOM);
-                        launchApkInstaller(finalApk);
+                // A different Echo VR (e.g. a Discord-patched one) is signed with another key, and
+                // Android refuses to install over it - say so instead of a vague "App not installed".
+                String installedSigner = NevrRuntime.installedSignerSha256(context);
+                if (installedSigner != null && !installedSigner.equals(release.apkSignerSha256)) {
+                    if (NevrRuntime.installedVersionCode(context) < 0) {
+                        // Removed for this account, but still installed for another account on the headset.
+                        throw new Exception("A different Echo VR is still installed for another account on this headset, "
+                                + "so this one can't be installed. Switch to the headset's main account and use "
+                                + "Uninstall Echo VR there (it removes it for every account), then install again.");
                     }
-                });
-            } else {
+                    throw new Exception("The Echo VR already on this headset is a different build and can't be updated in place. "
+                            + "Uninstall it first, then install again.");
+                }
+
+                deleteOtherDownloads("apk", "nevr-runtime-", release.apk.name);
+                File apk = downloadArtifact(release.apk, "apk", "Echo VR " + release.version);
+
+                String[] identity = NevrRuntime.archiveIdentity(context, apk.getPath());
+                if (!"com.readyatdawn.r15".equals(identity[0])
+                        || (identity[1] != null && !identity[1].equals(release.apkSignerSha256))) {
+                    apk.delete();
+                    throw new Exception("The downloaded APK isn't the expected Echo VR build.");
+                }
+
                 mainHandler.post(() -> {
                     listener.onTaskFinished();
-                    if (!isTaskCancelled) listener.onError(name + " download failed from all sources.");
+                    if (!isTaskCancelled) launchApkInstaller(apk);
+                });
+            } catch (Exception e) {
+                Log.e("InstallerManager", "NEVR runtime install failed", e);
+                mainHandler.post(() -> {
+                    listener.onTaskFinished();
+                    if (!isTaskCancelled) listener.onError(e.getMessage());
                 });
             }
         });
+    }
+
+    /**
+     * Calls back (on the main thread) only when the installed Echo VR is a NEVR runtime build
+     * older than the release channel's. Stays quiet on any failure.
+     */
+    public void checkNevrRuntimeUpdate(NevrUpdateCallback callback) {
+        checkNevrRuntimeUpdate(callback, false);
+    }
+
+    /** @param manual when true (the "Check Echo Updates" button), shows progress and reports "no update" and errors too. */
+    public void checkNevrRuntimeUpdate(NevrUpdateCallback callback, boolean manual) {
+        if (manual) mainHandler.post(() -> {
+            listener.onTaskStarted();
+            listener.onProgress(-1, "Checking for Echo VR updates...");
+        });
+        executorService.execute(() -> {
+            try {
+                NevrRuntime.Release release = NevrRuntime.fetchLatest(context);
+                long installed = NevrRuntime.installedVersionCode(context);
+                boolean available = installed >= 0 && installed < release.apkVersionCode
+                        && release.apkSignerSha256.equals(NevrRuntime.installedSignerSha256(context));
+                mainHandler.post(() -> {
+                    if (manual) listener.onTaskFinished();
+                    if (available) callback.onNevrUpdateAvailable(release);
+                    else if (manual) listener.onUpdateNotAvailable();
+                });
+            } catch (Exception e) {
+                Log.w("InstallerManager", "NEVR runtime update check failed: " + e.getMessage());
+                if (manual) mainHandler.post(() -> {
+                    listener.onTaskFinished();
+                    listener.onError("Update check failed: " + e.getMessage());
+                });
+            }
+        });
+    }
+
+    /** Downloads a manifest artifact (resuming if possible) and checks its size and sha256. */
+    private File downloadArtifact(NevrRuntime.Artifact artifact, String dirType, String label) throws Exception {
+        File file = downloadFile(artifact.url, dirType, artifact.name, label, false);
+        if (isTaskCancelled) throw new Exception("Cancelled.");
+        if (file == null) throw new Exception(label + " download failed. Check your connection and try again.");
+
+        mainHandler.post(() -> listener.onProgress(-1, "Verifying " + label + "..."));
+        String hash = file.length() == artifact.size ? FileUtil.calculateSHA256(file) : null;
+        if (!artifact.sha256.equalsIgnoreCase(hash)) {
+            file.delete();
+            throw new Exception(label + " download was corrupted. Try again.");
+        }
+        return file;
+    }
+
+    /** Removes older downloads of the same artifact family so each release doesn't leave ~175 MB behind. */
+    private void deleteOtherDownloads(String dirType, String prefix, String keepName) {
+        File dir = context.getExternalFilesDir(dirType);
+        File[] files = dir != null ? dir.listFiles() : null;
+        if (files == null) return;
+        for (File f : files) {
+            if (f.getName().startsWith(prefix) && !f.getName().equals(keepName)) f.delete();
+        }
     }
 
     public void installGameData() {
@@ -214,28 +198,20 @@ public class InstallerManager {
         isTaskCancelled = false;
         mainHandler.post(listener::onTaskStarted);
 
-        // Run concurrently with the data download/extraction below, not after it - patches
-        // don't actually depend on game data being present (they're separate files under
-        // Target), only on the base APK, so there's no reason to make them wait in line.
-        ModPatchService.start(context);
-
         currentTask = executorService.submit(() -> {
-            File zipFile = downloadFile(dataUrl, "downloads", "game_data.zip", "Game Data", false);
-
-            if (zipFile == null && !isTaskCancelled) {
-                mainHandler.post(() -> listener.onProgress(0, "Primary failed, trying backup..."));
-                // The partial file (if any) was being written from the primary host - resuming
-                // it against a different backup host via Range can silently splice together
-                // bytes from two different servers if they're not byte-identical, corrupting
-                // the archive. Start the backup attempt clean.
+            // The NEVR release's game-data zip, checked against the manifest's sha256. No other source.
+            File zipFile;
+            try {
+                NevrRuntime.Artifact data = NevrRuntime.fetchLatest(context).gameData;
+                if (data == null) throw new Exception("The current Echo VR release has no game data.");
+                deleteOtherDownloads("downloads", "echovr-data-", data.name);
                 deleteStaleDownload("downloads", "game_data.zip");
-                zipFile = downloadFile(backupDataUrl, "downloads", "game_data.zip", "Game Data", true);
-            }
-
-            if (zipFile == null || isTaskCancelled) {
+                zipFile = downloadArtifact(data, "downloads", "Game Data");
+            } catch (Exception e) {
+                Log.e("InstallerManager", "Game data download failed", e);
                 mainHandler.post(() -> {
                     listener.onTaskFinished();
-                    if (!isTaskCancelled) listener.onError("Data download failed.");
+                    if (!isTaskCancelled) listener.onError(e.getMessage());
                 });
                 return;
             }
@@ -322,7 +298,7 @@ public class InstallerManager {
             }
 
             int contentLength = connection.getContentLength();
-            long totalFileSize = (contentLength > 0) ? (contentLength + downloaded) : (fileName.contains("zip") ? TOTAL_FILE_SIZE : 0);
+            long totalFileSize = (contentLength > 0) ? (contentLength + downloaded) : 0;
 
             input = connection.getInputStream();
             output = new FileOutputStream(file, isResuming);
@@ -352,7 +328,8 @@ public class InstallerManager {
                     if (progress != lastReportedProgress) {
                         lastReportedProgress = progress;
                         long mb = totalDownloaded / (1024 * 1024);
-                        mainHandler.post(() -> listener.onProgress(progress, "Downloading " + prefix + ": " + progress + "% (" + mb + "MB)"));
+                        long totalMb = totalFileSize / (1024 * 1024);
+                        mainHandler.post(() -> listener.onProgress(progress, "Downloading " + prefix + "\n" + mb + " MB of " + totalMb + " MB"));
                     }
                 }
             }
@@ -379,11 +356,16 @@ public class InstallerManager {
         try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(zipFile)))) {
             ZipEntry entry;
             byte[] buffer = new byte[32768];
+            String targetRoot = targetDir.getCanonicalPath() + File.separator;
 
             while ((entry = zis.getNextEntry()) != null) {
                 if (isTaskCancelled) return false;
 
                 File outputFile = new File(targetDir, entry.getName());
+                if (!outputFile.getCanonicalPath().startsWith(targetRoot)) {
+                    Log.e("InstallerManager", "Zip entry outside target: " + entry.getName());
+                    return false;
+                }
                 if (entry.isDirectory()) {
                     if (!outputFile.exists()) outputFile.mkdirs();
                 } else {
@@ -434,15 +416,6 @@ public class InstallerManager {
         }
     }
 
-    private void writeMarkerFile(File baseApkFile, File installedApkFile, String installSource) {
-        try {
-            File targetDir = new File(Environment.getExternalStorageDirectory(), "Android/media/com.readyatdawn.r15");
-            FileUtil.writeInstallerMarker(targetDir, baseApkFile, installedApkFile, INSTALLER_VERSION, installSource);
-        } catch (Exception e) {
-            Log.e("InstallerManager", "Failed to write marker file", e);
-        }
-    }
-
     public void clearCache() {
         mainHandler.post(listener::onTaskStarted);
         executorService.execute(() -> {
@@ -451,14 +424,6 @@ public class InstallerManager {
                 listener.onTaskFinished();
                 listener.onSuccess("Cache cleared.");
             });
-        });
-    }
-
-    public void deleteGameDataFiles() {
-        executorService.execute(() -> {
-            File radDir = new File(Environment.getExternalStorageDirectory(), "Android/media/com.readyatdawn.r15");
-            if (radDir.exists()) deleteDirectory(radDir);
-            prefs.edit().remove(PREF_INSTALLATION_DATE).apply();
         });
     }
 

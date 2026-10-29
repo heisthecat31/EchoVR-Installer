@@ -3,7 +3,10 @@ package com.echovr.installer;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -14,8 +17,8 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.UserManager;
 import android.provider.Settings;
-import android.text.TextUtils;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
@@ -33,16 +36,12 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
-public class MainActivity extends AppCompatActivity implements InstallerManager.Listener, DiscordAuth.Callback, TesterBundleInstaller.Listener {
+public class MainActivity extends AppCompatActivity implements InstallerManager.Listener {
 
     private InstallerManager manager;
-    private UpdateManager updateManager;
-    private DiscordAuth discordAuth;
-    private TesterBundleInstaller testerInstaller;
     private SharedPreferences prefs;
 
     // UI Elements
@@ -55,12 +54,11 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
     private static final String PREFS_NAME = "EchoVRInstallerPrefs";
     private static final String PREF_PERMISSION_POPUP_SHOWN = "permission_popup_shown";
-    /** The Quest dev folder code (dash stripped) - also what unlocks Developer Settings. */
-    private static final String PREF_DEV_CODE = "dev_folder_code";
     private static final String ECHO_VR_PACKAGE = "com.readyatdawn.r15";
-    private static final String CURRENT_VERSION = "4.8";
+    private static final String OLD_INSTALLER_PACKAGE = "com.echovr.installer";
+    private static final String CURRENT_VERSION = "5.0";
     private boolean justInstalledEchoVr = false;
-    private boolean hasCheckedForModUpdates = false;
+    private boolean hasCheckedForNevrUpdate = false;
 
     // Permissions Launchers
     private final ActivityResultLauncher<Intent> manageStorageLauncher = registerForActivityResult(
@@ -85,14 +83,46 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
         prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         manager = new InstallerManager(this, this);
-        updateManager = new UpdateManager(this, this);
-        discordAuth = new DiscordAuth(this, this);
-        testerInstaller = new TesterBundleInstaller(this, this);
-        manager.fetchRemoteConfig();
         manager.checkForUpdates(CURRENT_VERSION, true);
 
         initializeViews();
         checkInstallPermission();
+        offerOldInstallerRemoval();
+
+        // On Quest the system install/uninstall dialogs open as separate panels and this activity stays
+        // resumed behind them, so onResume() never fires afterwards - refresh when Echo VR changes instead.
+        IntentFilter packageFilter = new IntentFilter();
+        packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        packageFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        packageFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        packageFilter.addDataScheme("package");
+        ContextCompat.registerReceiver(this, packageChangeReceiver, packageFilter, ContextCompat.RECEIVER_EXPORTED);
+    }
+
+    private final BroadcastReceiver packageChangeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            Uri data = intent.getData();
+            if (data != null && ECHO_VR_PACKAGE.equals(data.getSchemeSpecificPart()) && !isFinishing() && !isDestroyed()) {
+                checkState();
+            }
+        }
+    };
+
+    /**
+     * Up to 4.8 the installer was "com.echovr.installer", signed with a debug key. This build has a new
+     * key, so it's a new package: the old app's self-update installs it alongside rather than over it.
+     * Remove the old one here (Android always asks the user to confirm uninstalling another app).
+     */
+    private void offerOldInstallerRemoval() {
+        if (!isPackageInstalled(OLD_INSTALLER_PACKAGE)) return;
+        new AlertDialog.Builder(this)
+                .setTitle("Remove Old Installer")
+                .setMessage("You're on the new Echo VR Installer. The old one is still on this headset and won't get updates any more.\n\n" +
+                        "Remove it now? Echo VR and your game data stay as they are.")
+                .setPositiveButton("REMOVE", (d, w) -> uninstallPackage(OLD_INSTALLER_PACKAGE))
+                .setNegativeButton("LATER", null)
+                .show();
     }
 
     private void setupFullscreenTransparent() {
@@ -124,17 +154,15 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         // Actions
         downloadButton.setOnClickListener(v -> manager.installGameData());
         reinstallButton.setOnClickListener(v -> showConfirmDialog("Reinstall Game Data", "This will re-download all game data.", () -> manager.installGameData()));
-        checkGameUpdatesButton.setOnClickListener(v -> updateManager.checkAndApplyUpdates(null, false));
+        checkGameUpdatesButton.setOnClickListener(v -> manager.checkNevrRuntimeUpdate(this::onNevrUpdateAvailable, true));
         grantPermissionsButton.setOnClickListener(v -> openAppPermissions());
         launchEchoVRButton.setOnClickListener(v -> launchEchoVR());
 
-        // Uninstall Action
+        // Uninstall Action. Game data lives in Echo VR's own media folder, which Android removes with the
+        // app - and only once the uninstall is actually confirmed, so cancelling the system prompt keeps it.
         uninstallEchoVRButton.setOnClickListener(v -> showConfirmDialog("Uninstall Echo VR",
-                "This will uninstall the Echo VR app and delete all game data files. This action cannot be undone.\n\nAre you sure you want to proceed?",
-                () -> {
-                    manager.deleteGameDataFiles(); 
-                    uninstallEchoVR(); 
-                }));
+                "This uninstalls Echo VR, and its game data goes with it. This can't be undone.\n\nAre you sure you want to proceed?",
+                this::uninstallEchoVR));
 
         // Utility Buttons
         View.OnClickListener clearCache = v -> showConfirmDialog("Clear Cache", "Delete temporary files? This does not affect installed game data.", () -> manager.clearCache());
@@ -164,130 +192,53 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     }
 
     private void showSettingsDialog() {
-        if (prefs.getString(PREF_DEV_CODE, null) != null) {
-            startTesterBundleFlow();
-            return;
-        }
+        View view = getLayoutInflater().inflate(R.layout.dialog_settings, null);
+        TextView stable = view.findViewById(R.id.channelStable);
+        TextView beta = view.findViewById(R.id.channelBeta);
+        TextView description = view.findViewById(R.id.channelDescription);
 
-        EditText codeInput = new EditText(this);
-        codeInput.setHint("Developer code (xxxxx-xxxxx)");
-        codeInput.setTextColor(Color.WHITE);
-        codeInput.setHintTextColor(Color.parseColor("#888888"));
-        codeInput.setBackground(getResources().getDrawable(R.drawable.edit_text_background));
-        codeInput.setPadding(25, 20, 25, 20);
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(view).create();
+        dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
 
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(50, 30, 50, 10);
-        layout.addView(codeInput);
+        Runnable render = () -> {
+            boolean isBeta = NevrRuntime.CHANNEL_BETA.equals(NevrRuntime.getChannel(this));
+            styleSegment(stable, !isBeta);
+            styleSegment(beta, isBeta);
+            description.setText(isBeta
+                    ? "Get new Echo VR builds as soon as they're out. They may have bugs."
+                    : "Get Echo VR builds once they've been tested. Uses beta until the first stable release.");
+        };
+        View.OnClickListener pick = v -> {
+            String channel = v == beta ? NevrRuntime.CHANNEL_BETA : NevrRuntime.CHANNEL_STABLE;
+            if (channel.equals(NevrRuntime.getChannel(this))) return;
+            NevrRuntime.setChannel(this, channel);
+            render.run();
+            // Moving to a channel with a newer build offers it right away; an older one can't be
+            // installed over a newer one, so that just waits for the channel's next release.
+            if (isPackageInstalled(ECHO_VR_PACKAGE)) manager.checkNevrRuntimeUpdate(this::onNevrUpdateAvailable);
+        };
+        stable.setOnClickListener(pick);
+        beta.setOnClickListener(pick);
+        render.run();
 
-        new AlertDialog.Builder(this)
-                .setTitle("Developer Settings")
-                .setView(layout)
-                .setPositiveButton("Submit", (d, w) -> {
-                    String code = TesterBundleInstaller.normalizeDevCode(codeInput.getText().toString());
-                    if (code == null) {
-                        Toast.makeText(this, "Invalid code", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    showProgressDialog("Checking code...", false);
-                    testerInstaller.verifyDevCode(code, (ok, error) -> {
-                        if (isFinishing() || isDestroyed()) return;
-                        dismissProgressDialog();
-                        if (ok) {
-                            prefs.edit().putString(PREF_DEV_CODE, code).apply();
-                            startTesterBundleFlow();
-                        } else if (error == null) {
-                            Toast.makeText(this, "Invalid code", Toast.LENGTH_SHORT).show();
-                        } else {
-                            new AlertDialog.Builder(this).setTitle("Error").setMessage(error).setPositiveButton("OK", null).show();
-                        }
-                    });
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
+        view.findViewById(R.id.settingsDone).setOnClickListener(v -> dialog.dismiss());
+        dialog.show();
     }
 
-    // --- Tester bundle (dev code) install flow ---
-
-    private void startTesterBundleFlow() {
-        new AlertDialog.Builder(this)
-                .setTitle("Install Test Build")
-                .setMessage("This downloads the tester bundle and installs a side-by-side \"Echo VR (afk)\" test app, " +
-                        "signed with a key kept only on this headset, and copies stock Echo VR's base data into it.\n\n" +
-                        "Stock Echo VR must already be installed and have been launched once to its main menu.")
-                .setPositiveButton("Continue", (d, w) -> promptDisplayNameForTesterBundle())
-                .setNegativeButton("Cancel", null)
-                .setNeutralButton("Change Code", (d, w) -> {
-                    prefs.edit().remove(PREF_DEV_CODE).apply();
-                    showSettingsDialog();
-                })
-                .show();
+    private void styleSegment(TextView segment, boolean selected) {
+        segment.setBackgroundResource(selected ? R.drawable.segment_selected_background : 0);
+        segment.setTextColor(getColor(selected ? R.color.echo_text : R.color.echo_text_faint));
     }
 
-    private void promptDisplayNameForTesterBundle() {
-        String existing = testerInstaller.peekExistingDisplayName();
-
-        EditText nameInput = new EditText(this);
-        nameInput.setHint("Display name (1-20 characters)");
-        nameInput.setTextColor(Color.WHITE);
-        nameInput.setHintTextColor(Color.parseColor("#888888"));
-        nameInput.setBackground(getResources().getDrawable(R.drawable.edit_text_background));
-        nameInput.setPadding(25, 20, 25, 20);
-        if (existing != null) nameInput.setText(existing);
-
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(50, 30, 50, 10);
-        layout.addView(nameInput);
-
-        new AlertDialog.Builder(this)
-                .setTitle(existing != null ? "Display name (currently " + existing + ")" : "Choose a display name")
-                .setView(layout)
-                .setPositiveButton("Install", (d, w) -> {
-                    String name = nameInput.getText().toString().trim();
-                    if (name.isEmpty()) {
-                        Toast.makeText(this, "Enter a display name", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    showProgressDialog("Starting...", false);
-                    testerInstaller.downloadAndInstall(prefs.getString(PREF_DEV_CODE, null), name);
-                })
-                .setNegativeButton("Cancel", null)
-                .show();
-    }
-
-    @Override
-    public void onProgress(String message) {
+    private void onNevrUpdateAvailable(NevrRuntime.Release release) {
         if (isFinishing() || isDestroyed()) return;
-        if (progressDialog == null || !progressDialog.isShowing()) {
-            showProgressDialog(message, false);
-        }
-        TextView text = progressDialog.findViewById(R.id.dialogProgressText);
-        if (text != null) text.setText(message);
-    }
-
-    @Override
-    public void onNeedUninstallConfirm(Runnable proceed, Runnable cancel) {
-        if (isFinishing() || isDestroyed()) {
-            // No UI left to ask through - don't leave the background flow hanging forever waiting
-            // for a tap that can never come, but also don't uninstall anything without someone
-            // having actually confirmed it.
-            cancel.run();
-            return;
-        }
-        dismissProgressDialog();
+        String channel = NevrRuntime.CHANNEL_BETA.equals(release.channel) ? " (beta)" : "";
         new AlertDialog.Builder(this)
-                .setTitle("Replace Existing Test Build?")
-                .setMessage("The test build already on this headset is signed with a different key and can't be " +
-                        "updated in place. Uninstalling it removes its files; this installer puts them back " +
-                        "afterwards (base data, pack, switches, and your name).\n\nUninstall the old test build and continue?")
-                .setPositiveButton("Uninstall & Continue", (d, w) -> {
-                    showProgressDialog("Uninstalling old test build...", false);
-                    proceed.run();
-                })
-                .setNegativeButton("Cancel", (d, w) -> cancel.run())
-                .setCancelable(false)
+                .setTitle("Update Echo VR")
+                .setMessage("Echo VR " + release.version + channel + " is available (about "
+                        + (release.apk.size / (1024 * 1024)) + " MB). It installs over your current version and keeps your game data.\n\nDownload and install now?")
+                .setPositiveButton("DOWNLOAD & INSTALL", (d, w) -> manager.installNevrRuntime())
+                .setNegativeButton("LATER", null)
                 .show();
     }
 
@@ -313,9 +264,9 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
                 launchEchoVRButton.setVisibility(View.VISIBLE);
                 uninstallEchoVRButton.setVisibility(View.VISIBLE);
 
-                if (!hasCheckedForModUpdates) {
-                    hasCheckedForModUpdates = true;
-                    ModPatchService.start(this);
+                if (!hasCheckedForNevrUpdate) {
+                    hasCheckedForNevrUpdate = true;
+                    manager.checkNevrRuntimeUpdate(this::onNevrUpdateAvailable);
                 }
             } else {
                 statusText.setText("●  Game data missing");
@@ -351,10 +302,14 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
             showProgressDialog(message);
         }
 
-        TextView text = progressDialog.findViewById(R.id.dialogProgressText);
+        TextView percent = progressDialog.findViewById(R.id.dialogProgressPercent);
         ProgressBar bar = progressDialog.findViewById(R.id.dialogProgressBar);
 
-        if (text != null) text.setText(message);
+        setProgressMessage(progressDialog.getWindow().getDecorView(), message);
+        if (percent != null) {
+            percent.setVisibility(progress >= 0 ? View.VISIBLE : View.GONE);
+            percent.setText(progress + "%");
+        }
         if (bar != null) {
             if (progress >= 0) {
                 bar.setIndeterminate(false);
@@ -362,6 +317,18 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
             } else {
                 bar.setIndeterminate(true);
             }
+        }
+    }
+
+    /** A progress message's first line is the popup's title; anything after it is the detail line. */
+    private void setProgressMessage(View root, String message) {
+        TextView title = root.findViewById(R.id.dialogProgressTitle);
+        TextView detail = root.findViewById(R.id.dialogProgressText);
+        int newline = message.indexOf('\n');
+        if (title != null) title.setText(newline < 0 ? message : message.substring(0, newline));
+        if (detail != null) {
+            detail.setVisibility(newline < 0 ? View.GONE : View.VISIBLE);
+            if (newline >= 0) detail.setText(message.substring(newline + 1));
         }
     }
 
@@ -406,35 +373,6 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     @Override
     public void onUpdateNotAvailable() {
         Toast.makeText(this, "No updates available", Toast.LENGTH_SHORT).show();
-    }
-
-    @Override
-    public void onBaseApkUpdateAvailable(UpdateManifest manifest) {
-        new AlertDialog.Builder(this)
-                .setTitle("Update EchoVR")
-                .setMessage(buildEchoVrChangeSummary(manifest))
-                .setPositiveButton("DOWNLOAD & INSTALL", (d, w) -> updateManager.downloadAndInstallBaseApk(manifest))
-                .setNegativeButton("LATER", null)
-                .show();
-    }
-
-    @SuppressLint("SetTextI18n")
-    private String buildEchoVrChangeSummary(UpdateManifest manifest) {
-        int added = 0, removed = 0;
-        for (UpdateManifest.UpdateEntry entry : manifest.entries) {
-            if ("add".equalsIgnoreCase(entry.op)) added++;
-            else if ("del".equalsIgnoreCase(entry.op)) removed++;
-        }
-
-        StringBuilder sb = new StringBuilder();
-        sb.append("A new Echo VR build is available:\n").append(manifest.baseApkName).append("\n\n");
-        sb.append("What's new:\n");
-        sb.append("• ").append(added).append(added == 1 ? " file to update\n" : " files to update\n");
-        if (removed > 0) {
-            sb.append("• ").append(removed).append(removed == 1 ? " file to remove\n" : " files to remove\n");
-        }
-        sb.append("\nYour installed game no longer matches this build, so mod updates can't be applied until it's updated.\n\nDownload and install now?");
-        return sb.toString();
     }
 
     // --- Permissions ---
@@ -524,18 +462,15 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         runOnUiThread(() -> {
             if (progressDialog != null && progressDialog.isShowing()) return;
             View view = getLayoutInflater().inflate(R.layout.dialog_progress, null);
-            TextView txt = view.findViewById(R.id.dialogProgressText);
-            txt.setText(message);
-            AlertDialog.Builder builder = new AlertDialog.Builder(this).setView(view).setCancelable(false);
+            setProgressMessage(view, message);
+            progressDialog = new AlertDialog.Builder(this).setView(view).setCancelable(false).create();
+            progressDialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+            View cancel = view.findViewById(R.id.dialogCancelButton);
             if (cancelable) {
-                builder.setNegativeButton("Cancel", (d, w) -> {
-                    manager.cancelCurrentTask();
-                    updateManager.cancel();
-                    discordAuth.cancel();
-                    DiscordAuthKeepAliveService.stop(this);
-                });
+                cancel.setOnClickListener(v -> manager.cancelCurrentTask());
+            } else {
+                cancel.setVisibility(View.GONE);
             }
-            progressDialog = builder.create();
             progressDialog.show();
         });
     }
@@ -548,7 +483,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
 
     private void showNewPlayerDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("New Player Installation");
+        builder.setTitle("Install Echo VR");
 
         LinearLayout mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
@@ -556,54 +491,15 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         mainLayout.setBackgroundColor(Color.parseColor("#FF111928"));
 
         TextView instruction = new TextView(this);
-        instruction.setText("Sign in with Discord to get your personal Echo VR APK. It downloads and installs automatically.\n\nYou need to be a member of the Echo VR Patcher Discord server.");
+        instruction.setText("Installs the latest Echo VR (about 175 MB). It downloads and installs automatically, and updates install over it.");
         instruction.setTextColor(Color.parseColor("#EEF3F8"));
         instruction.setTextSize(14);
         instruction.setGravity(Gravity.CENTER);
         instruction.setPadding(0, 0, 0, 25);
         mainLayout.addView(instruction);
 
-        Button signInBtn = dialogButton("SIGN IN WITH DISCORD", R.drawable.button_background);
-        mainLayout.addView(signInBtn);
-
-        Button joinBtn = dialogButton("JOIN PATCHER SERVER", R.drawable.button_background_secondary);
-        mainLayout.addView(joinBtn);
-        joinBtn.setOnClickListener(v -> openUrl(DiscordAuth.PATCHER_INVITE));
-
-        // Fallback for someone who already has a patched APK link (e.g. from the bot directly).
-        TextView haveLink = new TextView(this);
-        haveLink.setText("I already have an APK link");
-        haveLink.setTextColor(Color.parseColor("#3FD4FF"));
-        haveLink.setTextSize(13);
-        haveLink.setGravity(Gravity.CENTER);
-        haveLink.setPadding(0, 5, 0, 15);
-        mainLayout.addView(haveLink);
-
-        LinearLayout linkLayout = new LinearLayout(this);
-        linkLayout.setOrientation(LinearLayout.VERTICAL);
-        linkLayout.setVisibility(View.GONE);
-        mainLayout.addView(linkLayout);
-
-        EditText apkUrlInput = new EditText(this);
-        apkUrlInput.setHint("https://files.echovr.de/...apk");
-        apkUrlInput.setTextColor(Color.WHITE);
-        apkUrlInput.setHintTextColor(Color.parseColor("#888888"));
-        apkUrlInput.setBackground(getResources().getDrawable(R.drawable.edit_text_background));
-        apkUrlInput.setPadding(25, 20, 25, 20);
-        apkUrlInput.setTextSize(14);
-        LinearLayout.LayoutParams inputParams = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        inputParams.setMargins(0, 0, 0, 15);
-        apkUrlInput.setLayoutParams(inputParams);
-        linkLayout.addView(apkUrlInput);
-
-        Button installLinkBtn = dialogButton("INSTALL FROM LINK", R.drawable.button_background);
-        linkLayout.addView(installLinkBtn);
-
-        haveLink.setOnClickListener(v -> {
-            haveLink.setVisibility(View.GONE);
-            linkLayout.setVisibility(View.VISIBLE);
-        });
+        Button installBtn = dialogButton("INSTALL ECHO VR", R.drawable.button_background);
+        mainLayout.addView(installBtn);
 
         Button cancelBtn = dialogButton("CANCEL", R.drawable.button_background_secondary);
         mainLayout.addView(cancelBtn);
@@ -613,20 +509,9 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         dialog.getWindow().setBackgroundDrawableResource(R.drawable.dialog_background);
 
         cancelBtn.setOnClickListener(v -> dialog.dismiss());
-        signInBtn.setOnClickListener(v -> {
+        installBtn.setOnClickListener(v -> {
             dialog.dismiss();
-            onTaskStarted();
-            DiscordAuthKeepAliveService.start(this);
-            discordAuth.start();
-        });
-        installLinkBtn.setOnClickListener(v -> {
-            String extractedUrl = extractUrl(apkUrlInput.getText().toString().trim());
-            if (extractedUrl != null && extractedUrl.startsWith("http")) {
-                dialog.dismiss();
-                manager.installCustomApk(extractedUrl);
-            } else {
-                Toast.makeText(this, "No valid URL found", Toast.LENGTH_SHORT).show();
-            }
+            manager.installNevrRuntime();
         });
         dialog.show();
     }
@@ -646,40 +531,6 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
         return button;
     }
 
-    private void openUrl(String url) {
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
-        } catch (Exception e) {
-            Toast.makeText(this, "Cannot open link", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    // --- DiscordAuth Callbacks ---
-
-    @Override
-    public void onStatus(String message) {
-        onProgress(-1, message);
-    }
-
-    @Override
-    public void onPatchUrl(String patchUrl) {
-        DiscordAuthKeepAliveService.stop(this);
-        dismissProgressDialog();
-        manager.installCustomApk(patchUrl);
-    }
-
-    @Override
-    public void onError(String title, String message, String joinUrl) {
-        DiscordAuthKeepAliveService.stop(this);
-        onTaskFinished();
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
-                .setTitle(title)
-                .setMessage(message)
-                .setPositiveButton("OK", null);
-        if (joinUrl != null) builder.setNeutralButton("JOIN SERVER", (d, w) -> openUrl(joinUrl));
-        builder.show();
-    }
-
     private void showHelpDialog() {
         String message = "If you're experiencing issues:\n\n" +
                 "1. If links don't work, restart your device or switch WiFi networks.\n\n" +
@@ -689,7 +540,7 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
                 "   - Restart headset after doing both\n\n" +
                 "3. If it still crashes:\n" +
                 "   - Uninstall Echo VR\n" +
-                "   - Choose 'New player' option when reinstalling\n" +
+                "   - Tap 'Install Echo VR' to reinstall it\n" +
                 "   - Restart device";
         new AlertDialog.Builder(this)
                 .setTitle("Troubleshooting Guide")
@@ -743,21 +594,30 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     }
     
     private void uninstallEchoVR() {
+        uninstallPackage(ECHO_VR_PACKAGE);
+    }
+
+    /**
+     * A Quest with several accounts has a separate Android user per account, and a plain uninstall only
+     * removes the app for the current one - the APK stays on the headset for the others, so a differently
+     * signed build can't be installed afterwards. Ask for all users instead; Android only allows that from
+     * the headset's main user, so other profiles still get a plain uninstall.
+     */
+    private void uninstallPackage(String pkg) {
         try {
             Intent uninstallIntent = new Intent(Intent.ACTION_DELETE);
-            uninstallIntent.setData(Uri.parse("package:com.readyatdawn.r15"));
+            uninstallIntent.setData(Uri.parse("package:" + pkg));
             uninstallIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            UserManager userManager = (UserManager) getSystemService(USER_SERVICE);
+            if (userManager != null && userManager.isSystemUser()) {
+                // Intent.EXTRA_UNINSTALL_ALL_USERS - hidden from the SDK, but the system uninstaller honours it.
+                uninstallIntent.putExtra("android.intent.extra.UNINSTALL_ALL_USERS", true);
+            }
             startActivity(uninstallIntent);
         } catch (ActivityNotFoundException e) {
             Log.e("Uninstall", "Could not launch uninstall dialog.", e);
             Toast.makeText(this, "Could not open uninstaller.", Toast.LENGTH_SHORT).show();
         }
-    }
-
-    private String extractUrl(String text) {
-        if (TextUtils.isEmpty(text)) return null;
-        Matcher m = Pattern.compile("(https?://[^\\s]+)").matcher(text);
-        return m.find() ? m.group(1) : null;
     }
 
     private boolean isPackageInstalled(String pkg) {
@@ -817,10 +677,8 @@ public class MainActivity extends AppCompatActivity implements InstallerManager.
     @Override
     protected void onDestroy() {
         resumePollHandler.removeCallbacksAndMessages(null);
-        discordAuth.cancel();
-        DiscordAuthKeepAliveService.stop(this);
+        unregisterReceiver(packageChangeReceiver);
         manager.shutdown();
-        testerInstaller.shutdown();
         super.onDestroy();
     }
 }

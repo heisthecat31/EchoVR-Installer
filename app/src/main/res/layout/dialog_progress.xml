@@ -1,24 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:background="@drawable/dialog_background"
     android:orientation="vertical"
-    android:padding="20dp">
+    android:padding="24dp">
+
+    <!-- First line of the progress message, e.g. "Downloading Game Data" -->
+    <TextView
+        android:id="@+id/dialogProgressTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-condensed"
+        android:text="Preparing..."
+        android:textColor="@color/echo_text"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/dialogProgressPercent"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:fontFamily="sans-serif-condensed"
+        android:textColor="@color/echo_accent"
+        android:textSize="40sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
 
     <ProgressBar
         android:id="@+id/dialogProgressBar"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="100" />
+        android:layout_height="10dp"
+        android:layout_marginTop="14dp"
+        android:indeterminateTint="@color/echo_accent"
+        android:max="100"
+        android:progressDrawable="@drawable/progress_bar_drawable" />
 
+    <!-- Rest of the progress message, e.g. "420 MB of 894 MB" -->
     <TextView
         android:id="@+id/dialogProgressText"
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
         android:layout_marginTop="10dp"
-        android:text="Preparing download..."
-        android:textSize="14sp" />
+        android:textColor="@color/echo_text_dim"
+        android:textSize="13sp"
+        android:visibility="gone" />
+
+    <Button
+        android:id="@+id/dialogCancelButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:background="@drawable/button_background_secondary"
+        android:fontFamily="sans-serif-condensed"
+        android:text="CANCEL"
+        android:textColor="@color/echo_text"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        app:backgroundTint="@null" />
 
 </LinearLayout>

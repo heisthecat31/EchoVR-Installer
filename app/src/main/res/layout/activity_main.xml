@@ -92,7 +92,7 @@
 
             </LinearLayout>
 
-            <!-- New Player primary card - the hero action on this screen -->
+            <!-- Install Echo VR primary card - the hero action on this screen -->
             <LinearLayout
                 android:id="@+id/newPlayerOption"
                 android:layout_width="300dp"
@@ -148,14 +148,14 @@
                             android:fontFamily="sans-serif-condensed"
                             android:textStyle="bold"
                             android:textSize="18sp"
-                            android:text="New Player"
+                            android:text="Install Echo VR"
                             android:textColor="@color/echo_text" />
 
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:textSize="11sp"
-                            android:text="Sign in with Discord for your personal APK"
+                            android:text="Latest build, updates install over it"
                             android:textColor="@color/echo_text_dim"
                             android:layout_marginTop="1dp" />
 
@@ -368,7 +368,7 @@
                 <androidx.appcompat.widget.AppCompatButton
                     android:id="@+id/downloadButton"
                     style="@style/ActionRow"
-                    android:text="Download Game Data (894MB)"
+                    android:text="Download Game Data (940MB)"
                     android:drawableStart="@drawable/ic_trash" />
 
                 <androidx.appcompat.widget.AppCompatButton
