@@ -57,6 +57,7 @@ public class InstallerManager {
     private static final String DATA_FOLDER = "_data";
     private static final String PREFS_NAME = "EchoVRInstallerPrefs";
     private static final String PREF_INSTALLATION_DATE = "installation_date";
+    private static final String PREF_INSTALLED_GAME_DATA_SHA256 = "installed_game_data_sha256";
     private static final long REQUIRED_SPACE_BYTES = 2500L * 1024 * 1024;
 
     public InstallerManager(Context context, Listener listener) {
@@ -119,9 +120,12 @@ public class InstallerManager {
                     throw new Exception("The downloaded APK isn't the expected Echo VR build.");
                 }
 
+                boolean dataStale = gameDataStale(release.gameData);
                 mainHandler.post(() -> {
                     listener.onTaskFinished();
-                    if (!isTaskCancelled) launchApkInstaller(apk);
+                    if (isTaskCancelled) return;
+                    launchApkInstaller(apk);
+                    if (dataStale) installGameData();
                 });
             } catch (Exception e) {
                 Log.e("InstallerManager", "NEVR runtime install failed", e);
@@ -193,6 +197,18 @@ public class InstallerManager {
         }
     }
 
+    /**
+     * True when the manifest's game data differs from what was last extracted. With nothing recorded
+     * (installed before this was tracked) it only counts as stale if the data is missing, so an
+     * existing install isn't forced into a re-download.
+     */
+    private boolean gameDataStale(NevrRuntime.Artifact data) {
+        if (data == null) return false;
+        String installed = prefs.getString(PREF_INSTALLED_GAME_DATA_SHA256, null);
+        if (installed == null) return !verifyDataInstallation();
+        return !installed.equalsIgnoreCase(data.sha256);
+    }
+
     public void installGameData() {
         if (!hasEnoughSpace()) return;
         isTaskCancelled = false;
@@ -201,12 +217,14 @@ public class InstallerManager {
         currentTask = executorService.submit(() -> {
             // The NEVR release's game-data zip, checked against the manifest's sha256. No other source.
             File zipFile;
+            String dataSha256;
             try {
                 NevrRuntime.Artifact data = NevrRuntime.fetchLatest(context).gameData;
                 if (data == null) throw new Exception("The current Echo VR release has no game data.");
                 deleteOtherDownloads("downloads", "echovr-data-", data.name);
                 deleteStaleDownload("downloads", "game_data.zip");
                 zipFile = downloadArtifact(data, "downloads", "Game Data");
+                dataSha256 = data.sha256;
             } catch (Exception e) {
                 Log.e("InstallerManager", "Game data download failed", e);
                 mainHandler.post(() -> {
@@ -218,6 +236,7 @@ public class InstallerManager {
 
             mainHandler.post(() -> listener.onProgress(-1, "Extracting data..."));
             boolean success = extractZipFile(zipFile);
+            final String extractedSha256 = dataSha256;
 
             mainHandler.post(() -> {
                 listener.onTaskFinished();
@@ -225,7 +244,10 @@ public class InstallerManager {
                 if (success) {
                     if (verifyDataInstallation()) {
                         String date = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(new Date());
-                        prefs.edit().putString(PREF_INSTALLATION_DATE, date).apply();
+                        prefs.edit()
+                                .putString(PREF_INSTALLATION_DATE, date)
+                                .putString(PREF_INSTALLED_GAME_DATA_SHA256, extractedSha256)
+                                .apply();
                         listener.onSuccess("Installation complete");
                     } else {
                         listener.onError("Extraction incomplete - files missing.");
